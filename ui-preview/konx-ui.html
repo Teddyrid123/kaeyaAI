@@ -1,0 +1,485 @@
+<style>
+  :root {
+    /* --- neutrals: indigo-biased, chosen not defaulted --- */
+    --ground: #f5f6fb;
+    --ground-2: #eef0f8;
+    --panel: rgba(255, 255, 255, 0.62);
+    --panel-solid: #ffffff;
+    --stroke: rgba(30, 42, 90, 0.10);
+    --stroke-strong: rgba(30, 42, 90, 0.16);
+    --ink: #211f33;
+    --ink-soft: #565273;
+    --ink-faint: #8b88a6;
+    --accent: #1e2a5a;
+    --accent-ink: #ffffff;
+    --accent-glow: rgba(120, 130, 255, 0.35);
+    --hl: #fff2a8;            /* text-selection highlight */
+    --hl-edge: #f2d64e;
+    --good: #1f9d6b;
+    --shadow: 0 24px 60px -20px rgba(30, 34, 74, 0.28);
+    --shadow-soft: 0 10px 30px -14px rgba(30, 34, 74, 0.22);
+    --r-lg: 26px;
+    --r-md: 18px;
+    --r-sm: 12px;
+    --font: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #100c1e;
+      --ground-2: #1a1030;
+      --panel: rgba(38, 28, 66, 0.55);
+      --panel-solid: #1c1530;
+      --stroke: rgba(180, 160, 255, 0.14);
+      --stroke-strong: rgba(180, 160, 255, 0.22);
+      --ink: #f1edff;
+      --ink-soft: #b9b1d8;
+      --ink-faint: #7d759c;
+      --accent: #6f7bff;
+      --accent-ink: #0d0a18;
+      --accent-glow: rgba(150, 120, 255, 0.5);
+      --hl: rgba(255, 214, 120, 0.30);
+      --hl-edge: rgba(255, 214, 120, 0.6);
+      --shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.7);
+      --shadow-soft: 0 14px 34px -16px rgba(0, 0, 0, 0.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f5f6fb; --ground-2: #eef0f8; --panel: rgba(255,255,255,0.62);
+    --panel-solid:#fff; --stroke: rgba(30,42,90,0.10); --stroke-strong: rgba(30,42,90,0.16);
+    --ink:#211f33; --ink-soft:#565273; --ink-faint:#8b88a6; --accent:#1e2a5a;
+    --accent-ink:#fff; --accent-glow: rgba(120,130,255,0.35); --hl:#fff2a8; --hl-edge:#f2d64e;
+    --panel-solid:#ffffff; --shadow: 0 24px 60px -20px rgba(30,34,74,0.28);
+    --shadow-soft: 0 10px 30px -14px rgba(30,34,74,0.22);
+  }
+  :root[data-theme="dark"] {
+    --ground:#100c1e; --ground-2:#1a1030; --panel: rgba(38,28,66,0.55);
+    --panel-solid:#1c1530; --stroke: rgba(180,160,255,0.14); --stroke-strong: rgba(180,160,255,0.22);
+    --ink:#f1edff; --ink-soft:#b9b1d8; --ink-faint:#7d759c; --accent:#6f7bff;
+    --accent-ink:#0d0a18; --accent-glow: rgba(150,120,255,0.5); --hl: rgba(255,214,120,0.30);
+    --hl-edge: rgba(255,214,120,0.6); --shadow: 0 30px 70px -20px rgba(0,0,0,0.7);
+    --shadow-soft: 0 14px 34px -16px rgba(0,0,0,0.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  .stage {
+    position: relative;
+    min-height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    font-family: var(--font-text);
+    color: var(--ink);
+    background:
+      radial-gradient(120% 90% at 88% 12%, rgba(155, 140, 255, 0.20), transparent 55%),
+      radial-gradient(100% 80% at 8% 92%, rgba(126, 224, 230, 0.20), transparent 55%),
+      radial-gradient(90% 70% at 60% 100%, rgba(245, 169, 208, 0.18), transparent 50%),
+      linear-gradient(160deg, var(--ground), var(--ground-2));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .stage::before {
+      content: "";
+      position: absolute; inset: -20%;
+      background: radial-gradient(40% 40% at 50% 50%, rgba(155,140,255,0.10), transparent 70%);
+      animation: drift 22s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+  }
+  @keyframes drift { from { transform: translate(-4%, -2%); } to { transform: translate(6%, 4%); } }
+
+  /* ---------- simulated desktop / document behind ---------- */
+  .desk {
+    position: absolute; inset: 0;
+    padding: clamp(20px, 5vw, 72px);
+    display: flex; flex-direction: column;
+    gap: 22px;
+  }
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--font); font-weight: 600; letter-spacing: -0.01em;
+    color: var(--ink-soft);
+  }
+  .dots { display: flex; gap: 7px; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1){ background:#ff5f57;} .dots i:nth-child(2){ background:#febc2e;} .dots i:nth-child(3){ background:#28c840;}
+  .crumb { margin-left: 6px; font-size: 14px; }
+  .crumb b { color: var(--ink); }
+  .toggle-wrap { margin-left: auto; }
+
+  .doc {
+    max-width: 720px;
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    border: 1px solid var(--stroke);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-soft);
+    padding: clamp(22px, 3vw, 40px);
+  }
+  .doc h1 { font-family: var(--font); font-weight: 700; font-size: clamp(20px,2.4vw,26px);
+    letter-spacing: -0.02em; margin: 0 0 4px; }
+  .doc .meta { color: var(--ink-faint); font-size: 13px; margin: 0 0 20px; }
+  .doc p { font-size: 16px; line-height: 1.7; color: var(--ink-soft); margin: 0 0 14px; }
+  .sel {
+    background: linear-gradient(var(--hl), var(--hl));
+    box-shadow: 0 0 0 1px var(--hl-edge) inset;
+    border-radius: 4px; padding: 1px 3px; color: var(--ink);
+  }
+
+  /* ---------- floating enable pill ---------- */
+  .float-toggle {
+    display: inline-flex; align-items: center; gap: 12px;
+    background: var(--panel); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    border: 1px solid var(--stroke); border-radius: 999px;
+    padding: 8px 8px 8px 16px; box-shadow: var(--shadow-soft);
+    font-family: var(--font); font-weight: 600; font-size: 13.5px; color: var(--ink-soft);
+    cursor: pointer; user-select: none;
+  }
+  .switch {
+    width: 46px; height: 27px; border-radius: 999px; position: relative;
+    background: var(--stroke-strong); transition: background .25s ease; flex: none;
+  }
+  .switch b {
+    position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%;
+    background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: transform .25s ease;
+  }
+  .float-toggle[aria-pressed="true"] .switch { background: linear-gradient(120deg, #9b8cff, #7ee0e6); }
+  .float-toggle[aria-pressed="true"] .switch b { transform: translateX(19px); }
+
+  /* ---------- the orb (shared) ---------- */
+  .orb {
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 26%, rgba(255,255,255,0.95), rgba(255,255,255,0) 26%),
+      radial-gradient(circle at 70% 22%, #fce9b8, transparent 40%),
+      radial-gradient(circle at 78% 70%, #7ee0e6, transparent 46%),
+      radial-gradient(circle at 30% 78%, #f5a9d0, transparent 50%),
+      radial-gradient(circle at 50% 50%, #9b8cff, #6a5cd6 78%);
+    box-shadow:
+      inset 0 -6px 14px rgba(60,40,120,0.35),
+      inset 0 6px 12px rgba(255,255,255,0.55),
+      0 10px 26px -6px var(--accent-glow);
+    position: relative;
+  }
+  .orb::after {
+    content: ""; position: absolute; left: 22%; top: 14%; width: 34%; height: 26%;
+    border-radius: 50%; background: radial-gradient(circle at 40% 40%, rgba(255,255,255,0.95), transparent 70%);
+    filter: blur(1px);
+  }
+
+  /* ---------- docked floating bot ---------- */
+  .dock {
+    position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+    z-index: 40; display: flex; align-items: center;
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .dock.hidden { opacity: 0; pointer-events: none; transform: translate(30px,-50%); }
+  .dock .tip {
+    font-family: var(--font); font-weight: 600; font-size: 13px; white-space: nowrap;
+    background: var(--accent); color: var(--accent-ink);
+    padding: 8px 13px; border-radius: 10px; margin-right: 10px;
+    box-shadow: var(--shadow-soft); opacity: 0; transform: translateX(8px);
+    transition: opacity .2s ease, transform .2s ease; pointer-events: none;
+  }
+  .dock:hover .tip { opacity: 1; transform: translateX(0); }
+  .bot-btn {
+    width: 66px; height: 66px; border: none; padding: 0; cursor: pointer;
+    background: none; margin-right: -14px; /* half-tuck off the edge */
+    transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+  }
+  .bot-btn .orb { width: 66px; height: 66px; }
+  .bot-btn:hover { transform: translateX(-10px) scale(1.06); }
+  .bot-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 50%; }
+  @media (prefers-reduced-motion: no-preference) {
+    .bot-btn .orb { animation: bob 4s ease-in-out infinite; }
+  }
+  @keyframes bob { 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(-7px);} }
+
+  /* ---------- chat popup ---------- */
+  .scrim { position: fixed; inset: 0; z-index: 45; background: rgba(20,16,40,0.18);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+
+  .panel {
+    position: fixed; z-index: 50; right: 22px; top: 50%;
+    width: min(400px, calc(100vw - 44px));
+    transform: translateY(-50%) translateX(30px) scale(.96);
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s ease, transform .35s cubic-bezier(.22,1,.36,1);
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(30px) saturate(1.4); backdrop-filter: blur(30px) saturate(1.4);
+    border: 1px solid var(--stroke-strong); border-radius: var(--r-lg);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .panel.open { opacity: 1; pointer-events: auto; transform: translateY(-50%) translateX(0) scale(1); }
+
+  .p-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px;
+    border-bottom: 1px solid var(--stroke); }
+  .p-head .orb { width: 34px; height: 34px; flex: none; }
+  .p-head .name { font-family: var(--font); font-weight: 700; letter-spacing: -0.01em; font-size: 15px; }
+  .p-head .status { font-size: 12px; color: var(--good); display: flex; align-items: center; gap: 5px; }
+  .p-head .status::before { content:""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+  .p-head .x { margin-left: auto; border: none; background: transparent; cursor: pointer;
+    color: var(--ink-faint); font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 9px; }
+  .p-head .x:hover { background: var(--stroke); color: var(--ink); }
+
+  .p-body { padding: 18px; display: flex; flex-direction: column; gap: 16px; max-height: min(70vh, 560px); overflow-y: auto; }
+
+  .capture { border: 1px dashed var(--stroke-strong); border-radius: var(--r-sm);
+    padding: 12px 14px; background: color-mix(in srgb, var(--panel-solid) 40%, transparent); }
+  .capture .lbl { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .capture .txt { font-size: 14px; color: var(--ink-soft); line-height: 1.55; font-style: italic; }
+
+  .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .chip {
+    display: flex; align-items: center; gap: 9px; text-align: left;
+    padding: 12px 13px; border-radius: var(--r-sm); cursor: pointer;
+    background: color-mix(in srgb, var(--panel-solid) 45%, transparent);
+    border: 1px solid var(--stroke); color: var(--ink);
+    font-family: var(--font); font-weight: 600; font-size: 13px;
+    transition: transform .12s ease, border-color .2s ease, background .2s ease;
+  }
+  .chip:hover { transform: translateY(-2px); border-color: var(--stroke-strong);
+    background: color-mix(in srgb, var(--panel-solid) 70%, transparent); }
+  .chip .ic { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center;
+    font-size: 14px; background: linear-gradient(135deg, #9b8cff33, #7ee0e633); }
+
+  .result { border-radius: var(--r-sm); border: 1px solid var(--stroke);
+    background: linear-gradient(135deg, color-mix(in srgb, #9b8cff 12%, transparent), color-mix(in srgb, #7ee0e6 12%, transparent));
+    padding: 13px 15px; display: none; }
+  .result.show { display: block; animation: pop .35s ease; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px);} to { opacity:1; transform: none; } }
+  .result .lbl { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--good); margin-bottom: 6px; }
+  .result .txt { font-size: 14.5px; line-height: 1.6; color: var(--ink); }
+  .result .apply { margin-top: 12px; display: inline-flex; align-items: center; gap: 7px;
+    background: var(--accent); color: var(--accent-ink); border: none; cursor: pointer;
+    font-family: var(--font); font-weight: 600; font-size: 13px; padding: 9px 15px; border-radius: 10px; }
+
+  .composer { padding: 14px 16px 16px; border-top: 1px solid var(--stroke); }
+  .field { display: flex; align-items: flex-end; gap: 10px;
+    background: var(--panel-solid); border: 1px solid var(--stroke); border-radius: var(--r-md);
+    padding: 10px 10px 10px 14px; box-shadow: var(--shadow-soft); }
+  .field textarea {
+    flex: 1; border: none; outline: none; resize: none; background: transparent;
+    font-family: var(--font-text); font-size: 14.5px; color: var(--ink); line-height: 1.5;
+    max-height: 120px; min-height: 22px; padding: 3px 0;
+  }
+  .field textarea::placeholder { color: var(--ink-faint); }
+  .send { flex: none; width: 38px; height: 38px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
+    transition: transform .15s ease, filter .2s ease; }
+  .send:hover { transform: scale(1.06); filter: brightness(1.08); }
+  .subrow { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+  .mini { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font);
+    font-weight: 600; font-size: 12.5px; color: var(--ink-soft); background: transparent;
+    border: 1px solid var(--stroke); border-radius: 999px; padding: 6px 11px; cursor: pointer; }
+  .mini:hover { border-color: var(--stroke-strong); color: var(--ink); }
+  .mini.deep[aria-pressed="true"] { background: linear-gradient(120deg,#9b8cff22,#7ee0e622); color: var(--ink); border-color: var(--stroke-strong); }
+  .mini.pro { margin-left: auto; color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+
+  /* onboarding hint */
+  .hint { position: fixed; right: 92px; top: 50%; transform: translateY(-50%);
+    z-index: 41; font-family: var(--font); font-weight: 600; font-size: 13px; color: var(--ink-soft);
+    background: var(--panel); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border: 1px solid var(--stroke); padding: 9px 14px; border-radius: 12px; box-shadow: var(--shadow-soft);
+    display: flex; align-items: center; gap: 8px; transition: opacity .3s ease; }
+  .hint.gone { opacity: 0; pointer-events: none; }
+  @media (max-width: 560px) { .hint { display: none; } .doc { max-width: 100%; } }
+
+  svg { display: block; }
+</style>
+
+<div class="stage" id="stage">
+  <div class="desk">
+    <div class="topbar">
+      <span class="dots"><i></i><i></i><i></i></span>
+      <span class="crumb">Document.docx — <b>KonX works here too</b></span>
+      <div class="toggle-wrap">
+        <button class="float-toggle" id="floatToggle" aria-pressed="true">
+          Float KonX on screen edge
+          <span class="switch"><b></b></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="doc">
+      <h1>Draft: welcome email</h1>
+      <p class="meta">Last edited just now · autosaved</p>
+      <p>Hi team, thanks for joining us. We are excited to have you.</p>
+      <p>
+        <span class="sel">the   quick brown fox   jumped over the lazy dog and everyone was
+        realy happy about it</span>
+      </p>
+      <p>Let me know if you have any questions and I will get back to you soon.</p>
+      <p style="color:var(--ink-faint);font-size:13.5px;">
+        ↑ Select any messy text in any app, then tap the KonX orb on the right edge →
+      </p>
+    </div>
+  </div>
+
+  <!-- onboarding hint -->
+  <div class="hint" id="hint">
+    <span>Tap to give KonX instructions</span>
+    <span aria-hidden="true">→</span>
+  </div>
+
+  <!-- docked floating bot -->
+  <div class="dock" id="dock">
+    <span class="tip">Ask KonX</span>
+    <button class="bot-btn" id="botBtn" aria-label="Open KonX assistant">
+      <span class="orb"></span>
+    </button>
+  </div>
+
+  <!-- scrim + panel -->
+  <div class="scrim" id="scrim"></div>
+  <aside class="panel" id="panel" role="dialog" aria-label="KonX assistant" aria-modal="false">
+    <div class="p-head">
+      <span class="orb"></span>
+      <div>
+        <div class="name">KonX</div>
+        <div class="status">Reading your selection</div>
+      </div>
+      <button class="x" id="closeBtn" aria-label="Close">×</button>
+    </div>
+
+    <div class="p-body">
+      <div class="capture">
+        <div class="lbl">📌 Selected text</div>
+        <div class="txt" id="capText">the quick brown fox jumped over the lazy dog and everyone was realy happy about it</div>
+      </div>
+
+      <div class="quick" id="quick">
+        <button class="chip" data-p="Fix the grammar and spelling"><span class="ic">✓</span> Fix grammar</button>
+        <button class="chip" data-p="Make this shorter and punchier"><span class="ic">✂</span> Make it shorter</button>
+        <button class="chip" data-p="Rewrite this in a formal tone"><span class="ic">◈</span> Make it formal</button>
+        <button class="chip" data-p="Improve the overall writing"><span class="ic">✦</span> Improve writing</button>
+      </div>
+
+      <div class="result" id="result">
+        <div class="lbl">✦ KonX suggests</div>
+        <div class="txt" id="resultText"></div>
+        <button class="apply" id="applyBtn">Replace in document ↵</button>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="field">
+        <textarea id="input" rows="1" placeholder="Tell KonX what to do with the text…"></textarea>
+        <button class="send" id="sendBtn" aria-label="Send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+      <div class="subrow">
+        <button class="mini" id="attach">📎 Attach</button>
+        <button class="mini deep" id="deep" aria-pressed="false">💡 Deep think</button>
+        <span class="mini pro">Pro</span>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function () {
+  var dock = document.getElementById('dock');
+  var botBtn = document.getElementById('botBtn');
+  var panel = document.getElementById('panel');
+  var scrim = document.getElementById('scrim');
+  var closeBtn = document.getElementById('closeBtn');
+  var hint = document.getElementById('hint');
+  var input = document.getElementById('input');
+  var sendBtn = document.getElementById('sendBtn');
+  var result = document.getElementById('result');
+  var resultText = document.getElementById('resultText');
+  var capText = document.getElementById('capText');
+  var floatToggle = document.getElementById('floatToggle');
+  var deep = document.getElementById('deep');
+  var applyBtn = document.getElementById('applyBtn');
+
+  var original = capText.textContent.trim();
+
+  // --- the same "improve" stub as the Phase 0 spike, plus a few instruction-aware variants ---
+  function tidy(t) {
+    t = t.replace(/\s+/g, ' ').trim();
+    if (t.length) t = t.charAt(0).toUpperCase() + t.slice(1);
+    if (!/[.!?]$/.test(t)) t += '.';
+    return t;
+  }
+  function improve(instruction) {
+    var t = tidy(original);
+    // tiny visible "spelling" fix so grammar mode feels real
+    t = t.replace(/\brealy\b/gi, 'really');
+    var ins = (instruction || '').toLowerCase();
+    if (ins.indexOf('short') !== -1) {
+      return 'The quick brown fox leapt over the lazy dog — and everyone was thrilled.';
+    }
+    if (ins.indexOf('formal') !== -1) {
+      return 'The swift brown fox proceeded to leap over the idle dog, to the delight of all present.';
+    }
+    return t;
+  }
+
+  function openPanel() {
+    panel.classList.add('open');
+    scrim.classList.add('open');
+    dock.classList.add('hidden');
+    hint.classList.add('gone');
+    setTimeout(function(){ input.focus(); }, 320);
+  }
+  function closePanel() {
+    panel.classList.remove('open');
+    scrim.classList.remove('open');
+    dock.classList.remove('hidden');
+    result.classList.remove('show');
+  }
+
+  botBtn.addEventListener('click', openPanel);
+  closeBtn.addEventListener('click', closePanel);
+  scrim.addEventListener('click', closePanel);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanel(); });
+
+  function run(instruction) {
+    var out = improve(instruction);
+    resultText.textContent = out;
+    result.classList.add('show');
+    result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  document.getElementById('quick').addEventListener('click', function (e) {
+    var chip = e.target.closest('.chip');
+    if (!chip) return;
+    input.value = chip.getAttribute('data-p');
+    run(input.value);
+  });
+
+  sendBtn.addEventListener('click', function () { if (input.value.trim()) run(input.value); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (input.value.trim()) run(input.value); }
+  });
+  input.addEventListener('input', function () {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  });
+
+  applyBtn.addEventListener('click', function () {
+    var sel = document.querySelector('.sel');
+    if (sel) { sel.textContent = resultText.textContent; sel.style.background = 'none'; sel.style.boxShadow = 'none'; }
+    capText.textContent = resultText.textContent;
+    original = resultText.textContent;
+    closePanel();
+  });
+
+  deep.addEventListener('click', function () {
+    deep.setAttribute('aria-pressed', deep.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  });
+
+  floatToggle.addEventListener('click', function () {
+    var on = floatToggle.getAttribute('aria-pressed') === 'true';
+    floatToggle.setAttribute('aria-pressed', on ? 'false' : 'true');
+    if (on) { dock.classList.add('hidden'); hint.classList.add('gone'); }
+    else { dock.classList.remove('hidden'); }
+  });
+})();
+</script>

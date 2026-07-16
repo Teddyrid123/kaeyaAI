@@ -1,0 +1,8 @@
+## KonX backend — Supabase project config.
+## `project_id` is a local label; it gets linked to your real cloud project
+## when you run `supabase link` (see BACKEND.md).
+project_id = "konx"
+
+## The AI proxy requires a signed-in user (the app sends the user's login token).
+[functions.ai]
+verify_jwt = true

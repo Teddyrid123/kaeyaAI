@@ -1,0 +1,1526 @@
+<!doctype html>
+<html lang="en" class="orb-kaeya">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kaeya</title>
+<style>
+  :root {
+    --panel: #ffffff;
+    --panel-2: #f6f7fc;
+    --glass: rgba(255,255,255,0.72);
+    --stroke: rgba(30,42,90,0.09);
+    --stroke-2: rgba(30,42,90,0.15);
+    --ink: #1c2033;
+    --ink-soft: #5b6079;
+    --ink-faint: #9498ad;
+    --accent: #1f2a68;
+    --accent-2: #4f6bff;
+    --good: #1f9d6b;
+    --pink: #f5a9d0;
+    --violet: #9b8cff;
+    --cyan: #7ee0e6;
+    --gold: #fce9b8;
+    --shadow: 0 40px 90px -30px rgba(40,44,110,0.35);
+    --shadow-soft: 0 14px 34px -16px rgba(40,44,110,0.22);
+    --r-xl: 30px;
+    --r-lg: 22px;
+    --r-md: 16px;
+    --r-sm: 12px;
+    --font: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  /* a hidden tab must always stay hidden, even when it has its own display rule */
+  [hidden] { display: none !important; }
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+  body {
+    font-family: var(--font-text); color: var(--ink);
+    /* transparent window — the panel is the whole app */
+    display: grid; place-items: center; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ================= the glossy orb ================= */
+  .orb{
+    display:block; border-radius:50%; position:relative; flex:none;
+    background:
+      radial-gradient(circle at 33% 25%, rgba(255,255,255,0.95), rgba(255,255,255,0) 24%),
+      radial-gradient(circle at 72% 20%, var(--gold), transparent 38%),
+      radial-gradient(circle at 80% 72%, var(--cyan), transparent 46%),
+      radial-gradient(circle at 26% 80%, var(--pink), transparent 50%),
+      radial-gradient(circle at 50% 48%, var(--violet), #6a5cd6 80%);
+    box-shadow:
+      inset 0 -8px 18px rgba(70,50,140,0.35),
+      inset 0 8px 16px rgba(255,255,255,0.6),
+      0 18px 40px -10px rgba(120,110,240,0.55);
+  }
+  .orb::after{ content:""; position:absolute; left:22%; top:13%; width:32%; height:24%; border-radius:50%;
+    background: radial-gradient(circle at 42% 42%, rgba(255,255,255,0.95), transparent 70%); filter: blur(0.5px);}
+  .orb.mini{ width:30px; height:30px; }
+
+  /* ---- character / look variants ---- */
+  .orb-ocean .orb{
+    background:
+      radial-gradient(circle at 32% 23%, rgba(255,255,255,.95), rgba(255,255,255,0) 26%),
+      radial-gradient(circle at 72% 30%, #7cc0ff, transparent 44%),
+      radial-gradient(circle at 50% 55%, #2f6bff, #123a9e 82%);
+    box-shadow: inset 0 -8px 18px rgba(10,30,90,.5), inset 0 8px 16px rgba(255,255,255,.5), 0 18px 40px -10px rgba(40,90,230,.55);
+  }
+  .orb-blossom .orb{
+    background:
+      radial-gradient(circle at 33% 25%, rgba(255,255,255,.95), rgba(255,255,255,0) 25%),
+      radial-gradient(circle at 74% 26%, #ffe0a3, transparent 40%),
+      radial-gradient(circle at 78% 74%, #8fe9ef, transparent 48%),
+      radial-gradient(circle at 30% 78%, #ff9ecb, transparent 52%),
+      radial-gradient(circle at 50% 50%, #ff90d0, #d979b3 82%);
+    box-shadow: inset 0 -8px 18px rgba(150,40,110,.35), inset 0 8px 16px rgba(255,255,255,.6), 0 18px 40px -10px rgba(255,140,200,.55);
+  }
+  .orb-mint .orb{
+    background:
+      radial-gradient(circle at 33% 24%, rgba(255,255,255,.95), rgba(255,255,255,0) 26%),
+      radial-gradient(circle at 74% 30%, #d3ffe6, transparent 42%),
+      radial-gradient(circle at 50% 55%, #34d399, #0f9d76 82%);
+    box-shadow: inset 0 -8px 18px rgba(10,90,70,.4), inset 0 8px 16px rgba(255,255,255,.55), 0 18px 40px -10px rgba(40,210,150,.5);
+  }
+  .orb-ember .orb{
+    background:
+      radial-gradient(circle at 33% 24%, rgba(255,255,255,.95), rgba(255,255,255,0) 26%),
+      radial-gradient(circle at 74% 28%, #ffe1b0, transparent 42%),
+      radial-gradient(circle at 30% 78%, #ff7a8a, transparent 52%),
+      radial-gradient(circle at 50% 52%, #ff8a5c, #e0523f 82%);
+    box-shadow: inset 0 -8px 18px rgba(140,40,30,.4), inset 0 8px 16px rgba(255,255,255,.55), 0 18px 40px -10px rgba(255,130,90,.55);
+  }
+  .orb-face .orb{
+    background:
+      radial-gradient(circle at 33% 25%, rgba(255,255,255,.9), rgba(255,255,255,0) 30%),
+      radial-gradient(circle at 50% 55%, #b7abff, #8b7be6 82%);
+    box-shadow: inset 0 -8px 18px rgba(60,45,130,.35), inset 0 8px 16px rgba(255,255,255,.6), 0 18px 40px -10px rgba(140,120,240,.5);
+  }
+  .orb-kaeya .orb{
+    background:#0b4bb8 url('kaeya-logo.png') center/cover no-repeat;
+    border-radius:24%;
+    box-shadow: inset 0 -6px 14px rgba(6,40,110,.35), inset 0 6px 12px rgba(255,255,255,.25), 0 18px 40px -10px rgba(11,75,184,.55);
+  }
+  .orb-kaeya .orb::after{ display:none; }
+  .orb .face{ display:none; position:absolute; inset:0; z-index:2; }
+  .orb-face .face{ display:block; }
+  .orb-kaeya .face{ display:none; }
+  .orb .eye{ position:absolute; top:37%; width:13%; height:17%; border-radius:50%; background:#2c2657; }
+  .orb .eye.l{ left:29%; } .orb .eye.r{ right:29%; }
+  .orb .mouth{ position:absolute; left:50%; top:56%; transform:translateX(-50%); width:26%; height:15%;
+    border:2.5px solid #2c2657; border-top:none; border-radius:0 0 60px 60px; }
+
+  /* ================= the app panel ================= */
+  .app{
+    position: relative;
+    width: min(940px, calc(100vw - 16px));
+    height: min(660px, calc(100vh - 16px));
+    background:
+      radial-gradient(120% 90% at 85% 8%, rgba(155,140,255,0.14), transparent 55%),
+      radial-gradient(110% 80% at 10% 100%, rgba(126,224,230,0.16), transparent 55%),
+      var(--panel);
+    border:1px solid var(--stroke-2); border-radius:var(--r-xl);
+    box-shadow:var(--shadow); overflow:hidden; display:flex;
+    animation: appIn .32s cubic-bezier(.22,1,.36,1);
+  }
+  @keyframes appIn{ from{ opacity:0; transform:scale(.97);} to{ opacity:1; transform:none;} }
+
+  /* left rail */
+  .rail{ width:66px; flex:none; background:linear-gradient(180deg, var(--panel-2), #eef0fa);
+    border-right:1px solid var(--stroke); display:flex; flex-direction:column; align-items:center; padding:16px 0; gap:10px;}
+  .rail .logo{ width:40px; height:40px; border-radius:11px; display:grid; place-items:center;
+    margin:6px 0 14px; overflow:hidden; background:transparent; }
+  .rail .logo img{ width:100%; height:100%; object-fit:cover; border-radius:11px; display:block; }
+  .rail button{ width:40px; height:40px; border-radius:12px; border:none; background:transparent; color:var(--ink-faint);
+    display:grid; place-items:center; cursor:pointer; transition:background .2s, color .2s; padding:0;}
+  .rail button:hover{ background:var(--stroke); color:var(--ink); }
+  .rail button.active{ background:#fff; color:var(--accent-2); box-shadow:var(--shadow-soft); }
+  .rail .look.active{ background:#fff; box-shadow:0 0 0 2px var(--accent-2), var(--shadow-soft); }
+  .rail .spacer{ flex:1; }
+  .rail .me{ width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--pink),var(--violet)); }
+
+  /* main column */
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  .top{ display:flex; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--stroke); }
+  .brand{ font-family:var(--font); font-weight:700; letter-spacing:-0.01em; font-size:16px;
+    display:inline-flex; align-items:center; gap:8px;}
+  .brand-logo{ width:22px; height:22px; border-radius:6px; display:block; }
+  .ver{ font-size:12px; color:var(--ink-faint); background:var(--panel-2); border:1px solid var(--stroke); padding:3px 9px; border-radius:999px;}
+  .top .status{ font-size:12px; color:var(--good); display:flex; align-items:center; gap:6px;}
+  .top .status::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 0 3px rgba(31,157,107,0.2);}
+
+  /* OpenAI / Gemini brain switch */
+  .provswitch{ display:inline-flex; background:var(--panel-2); border:1px solid var(--stroke); border-radius:999px; padding:3px; gap:2px; }
+  .provswitch button{ border:none; background:transparent; cursor:pointer; font-family:var(--font); font-weight:600; font-size:11.5px;
+    color:var(--ink-faint); padding:5px 12px; border-radius:999px; transition:background .2s, color .2s; }
+  .provswitch button:hover{ color:var(--ink); }
+  .provswitch button.active{ background:#fff; color:var(--accent-2); box-shadow:var(--shadow-soft); }
+
+  /* float-on-edge toggle in the top bar */
+  .float-toggle{ margin-left:auto; display:inline-flex; align-items:center; gap:10px; cursor:pointer;
+    background:var(--panel-2); border:1px solid var(--stroke); border-radius:999px; padding:6px 8px 6px 14px;
+    font-family:var(--font); font-weight:600; font-size:12px; color:var(--ink-soft); }
+  .float-toggle:hover{ border-color:var(--stroke-2); color:var(--ink); }
+  .switch{ width:40px; height:24px; border-radius:999px; position:relative; background:var(--stroke-2); transition:background .25s; flex:none;}
+  .switch b{ position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.25); transition:transform .25s;}
+  .float-toggle[aria-pressed="true"] .switch{ background: linear-gradient(120deg,var(--violet),var(--cyan)); }
+  .float-toggle[aria-pressed="true"] .switch b{ transform: translateX(16px); }
+
+  .top .x{ border:none; background:transparent; color:var(--ink-faint); width:34px; height:34px; border-radius:10px; font-size:22px; line-height:1; cursor:pointer;}
+  .top .x:hover{ background:var(--stroke); color:var(--ink); }
+
+  .content{ flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:center;
+    padding:clamp(14px,3vw,26px) clamp(20px,5vw,60px); }
+
+  /* welcome screen: keep the orb + text centered as a column */
+  #welcomeView{ width:100%; max-width:640px; display:flex; flex-direction:column; align-items:center; }
+
+  .hero-orb{ width:120px; height:120px; margin:clamp(6px,2vh,26px) 0 4px; }
+  .hero-orb .orb{ width:120px; height:120px; }
+  @media (prefers-reduced-motion: no-preference){ .hero-orb .orb{ animation: bob 5s ease-in-out infinite; } }
+  @keyframes bob{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
+  .reflection{ width:110px; height:24px; border-radius:50%; margin-top:-4px;
+    background:radial-gradient(ellipse at center, rgba(120,110,240,0.25), transparent 70%); filter:blur(4px);}
+
+  .welcome{ font-family:var(--font); font-weight:700; font-size:clamp(24px,3.2vw,32px); letter-spacing:-0.02em;
+    text-align:center; text-wrap:balance; margin:10px 0 6px;}
+  .welcome b{ background:linear-gradient(120deg, var(--accent-2), #8b6bff); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .sub{ text-align:center; color:var(--ink-soft); font-size:14.5px; max-width:44ch; margin:0 0 6px; line-height:1.55;}
+
+  .capture{ margin:16px 0 4px; width:100%; max-width:620px; border:1px dashed var(--stroke-2); border-radius:var(--r-md);
+    padding:12px 16px; background:var(--panel-2);}
+  .capture .lbl{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:5px;}
+  .capture .txt{ font-size:14px; color:var(--ink-soft); line-height:1.5; -webkit-user-select:text; user-select:text; }
+  .capture .txt.empty{ font-style:italic; color:var(--ink-faint); }
+
+  .cards{ width:100%; max-width:620px; display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:18px 0 4px;}
+  .card{ display:flex; align-items:center; gap:12px; text-align:left; cursor:pointer;
+    background:var(--panel-2); border:1px solid var(--stroke); border-radius:var(--r-md); padding:15px 16px;
+    font-family:var(--font); font-weight:600; font-size:14px; color:var(--ink); transition:transform .12s, border-color .2s, background .2s;}
+  .card:hover{ transform:translateY(-2px); border-color:var(--stroke-2); background:#fff; box-shadow:var(--shadow-soft);}
+  .card .ic{ width:34px; height:34px; border-radius:10px; flex:none; display:grid; place-items:center; color:var(--accent-2);
+    background:linear-gradient(135deg, rgba(155,140,255,0.18), rgba(126,224,230,0.18));}
+  .card .plus{ margin-left:auto; color:var(--ink-faint); font-size:20px; line-height:1;}
+
+  .result{ width:100%; max-width:620px; margin:16px 0 4px; border-radius:var(--r-md); border:1px solid var(--stroke);
+    background:linear-gradient(135deg, rgba(155,140,255,0.12), rgba(126,224,230,0.12)); padding:15px 17px; display:none;}
+  .result.show{ display:block; animation:pop .35s ease; }
+  @keyframes pop{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+  .result .lbl{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--good); margin-bottom:6px;}
+  .result .txt{ font-size:15px; line-height:1.6; color:var(--ink); -webkit-user-select:text; user-select:text;}
+  .result .row{ display:flex; align-items:center; gap:10px; margin-top:13px; }
+  .result .apply{ display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#fff;
+    border:none; cursor:pointer; font-family:var(--font); font-weight:600; font-size:13.5px; padding:10px 16px; border-radius:11px;}
+  .result .apply:hover{ filter:brightness(1.08); }
+  .result .redo{ background:transparent; border:1px solid var(--stroke); color:var(--ink-soft); cursor:pointer;
+    font-family:var(--font); font-weight:600; font-size:13px; padding:9px 14px; border-radius:11px; }
+  .result .redo:hover{ border-color:var(--stroke-2); color:var(--ink); }
+  .modeltag{ margin-top:11px; font-family:var(--font); font-weight:600; font-size:11.5px; color:var(--ink-faint);
+    display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+  .modeltag b{ color:var(--accent-2); font-weight:700; }
+  .modeltag .dot{ width:6px; height:6px; border-radius:50%; background:var(--violet); flex:none; }
+  .modeltag .tier{ background:var(--panel-2); border:1px solid var(--stroke); border-radius:999px; padding:2px 8px; color:var(--ink-soft); }
+  .modeltag .tier.warn{ background:rgba(224,146,40,0.12); border-color:rgba(224,146,40,0.4); color:#b06d12; }
+
+  /* appearance / character picker */
+  #appearanceView{ width:100%; max-width:600px; }
+  .appear-head{ text-align:center; margin:10px 0 2px; }
+  .appear-head h2{ font-family:var(--font); font-weight:700; font-size:clamp(22px,3vw,28px); letter-spacing:-0.02em; margin:0 0 6px;}
+  .appear-head p{ color:var(--ink-soft); font-size:14.5px; margin:0; }
+  .picks{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:24px 0 0; }
+  .pick{ position:relative; cursor:pointer; border:1px solid var(--stroke); border-radius:var(--r-md); background:var(--panel-2);
+    padding:20px 10px 15px; display:flex; flex-direction:column; align-items:center; gap:12px;
+    font-family:var(--font); font-weight:600; font-size:13px; color:var(--ink); transition:transform .12s, border-color .2s, box-shadow .2s;}
+  .pick:hover{ transform:translateY(-2px); box-shadow:var(--shadow-soft); border-color:var(--stroke-2); }
+  .pick .orb{ width:62px; height:62px; }
+  .pick.selected{ border-color:var(--accent-2); box-shadow:0 0 0 2px var(--accent-2) inset; }
+  .pick .check{ position:absolute; top:9px; right:9px; width:20px; height:20px; border-radius:50%; background:var(--accent-2); color:#fff;
+    display:none; place-items:center; }
+  .pick.selected .check{ display:grid; }
+  .appear-done{ display:block; margin:26px auto 6px; background:var(--accent); color:#fff; border:none; cursor:pointer;
+    font-family:var(--font); font-weight:600; font-size:14px; padding:11px 30px; border-radius:12px; }
+  .appear-done:hover{ filter:brightness(1.08); }
+  /* hide the "type an instruction" bar on any full-screen tab (look/personalize/subscription) */
+  .app.subview .composer{ display:none; }
+
+  /* ================= Personalize tab ================= */
+  #personalizeView{ width:100%; max-width:560px; }
+  .pform{ display:flex; flex-direction:column; gap:16px; margin:22px 0 0; }
+  .pfield{ display:flex; flex-direction:column; gap:7px; }
+  .pfield label{ font-family:var(--font); font-weight:600; font-size:13.5px; color:var(--ink); }
+  .pfield .hint{ font-weight:400; font-size:12px; color:var(--ink-faint); }
+  .pfield input, .pfield textarea{ width:100%; font-family:var(--font-text); font-size:14px; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--stroke); border-radius:var(--r-sm); padding:11px 13px;
+    outline:none; transition:border-color .2s, background .2s; -webkit-user-select:text; user-select:text; }
+  .pfield input:focus, .pfield textarea:focus{ border-color:var(--accent-2); background:#fff; }
+  .pfield textarea{ resize:vertical; min-height:66px; line-height:1.5; }
+  .pchips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pchip{ font-family:var(--font); font-weight:600; font-size:12.5px; color:var(--ink-soft);
+    background:var(--panel-2); border:1px solid var(--stroke); border-radius:999px; padding:7px 13px; cursor:pointer;
+    transition:background .18s, color .18s, border-color .18s; }
+  .pchip:hover{ border-color:var(--stroke-2); color:var(--ink); }
+  .pchip.on{ background:linear-gradient(120deg, rgba(155,140,255,0.2), rgba(126,224,230,0.2));
+    color:var(--accent); border-color:var(--accent-2); }
+  .psaved{ text-align:center; color:var(--good); font-size:13px; font-weight:600; margin:14px 0 0; height:16px;
+    opacity:0; transition:opacity .25s; }
+  .psaved.show{ opacity:1; }
+
+  /* ================= Subscription tab ================= */
+  #subscriptionView{ width:100%; max-width:660px; }
+  .plans{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:24px 0 0; align-items:stretch; }
+  .plan{ position:relative; display:flex; flex-direction:column; background:var(--panel-2); border:1px solid var(--stroke);
+    border-radius:var(--r-md); padding:20px 16px 18px; }
+  .plan.featured{ border-color:var(--accent-2); box-shadow:0 0 0 2px var(--accent-2) inset, var(--shadow-soft); }
+  .plan .tagpop{ position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--accent-2); color:#fff;
+    font-family:var(--font); font-weight:700; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase;
+    padding:4px 11px; border-radius:999px; white-space:nowrap; }
+  .plan .pname{ font-family:var(--font); font-weight:700; font-size:16px; color:var(--ink); }
+  .plan .price{ font-family:var(--font); margin:8px 0 2px; }
+  .plan .price b{ font-size:27px; font-weight:800; letter-spacing:-0.02em; color:var(--ink); }
+  .plan .price span{ font-size:12.5px; color:var(--ink-faint); font-weight:600; }
+  .plan .blurb{ font-size:12.5px; color:var(--ink-soft); line-height:1.45; margin:2px 0 12px; min-height:34px; }
+  .plan ul{ list-style:none; margin:0 0 16px; padding:0; display:flex; flex-direction:column; gap:9px; flex:1; }
+  .plan li{ display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:var(--ink); line-height:1.4; }
+  .plan li svg{ flex:none; color:var(--good); margin-top:1px; }
+  .plan .choose{ width:100%; font-family:var(--font); font-weight:600; font-size:13.5px; padding:11px; border-radius:11px;
+    cursor:pointer; border:1px solid var(--stroke-2); background:#fff; color:var(--ink); transition:filter .2s, background .2s; }
+  .plan .choose:hover{ background:var(--panel-2); }
+  .plan.featured .choose{ background:var(--accent); color:#fff; border-color:transparent; }
+  .plan.featured .choose:hover{ filter:brightness(1.1); background:var(--accent); }
+  .plan.current .choose{ background:transparent; color:var(--good); border-color:rgba(31,157,107,0.45); cursor:default; }
+  .pay-note{ text-align:center; color:var(--ink-faint); font-size:12px; margin:18px 0 4px; line-height:1.5; }
+
+  /* the "Save" toggle on a result */
+  .save-toggle[aria-pressed="true"]{ background:linear-gradient(120deg, rgba(155,140,255,0.18), rgba(126,224,230,0.18));
+    color:var(--accent-2); border-color:var(--accent-2); }
+  .save-toggle[aria-pressed="true"] svg{ fill:currentColor; }
+
+  /* ================= History + Saved tabs ================= */
+  #historyView, #savedView{ width:100%; max-width:600px; }
+  .listtools{ display:flex; justify-content:flex-end; margin:16px 0 0; }
+  .hlist{ display:flex; flex-direction:column; gap:12px; margin:16px 0 0; }
+  .hitem{ border:1px solid var(--stroke); background:var(--panel-2); border-radius:var(--r-md); padding:14px 16px; }
+  .hitem .hins{ display:flex; align-items:center; gap:8px; font-family:var(--font); font-weight:700; font-size:12.5px;
+    color:var(--accent-2); }
+  .hitem .hins .htime{ margin-left:auto; font-weight:600; font-size:11px; color:var(--ink-faint); }
+  .hitem .htext{ font-size:13.5px; color:var(--ink); line-height:1.5; margin:9px 0 0; max-height:70px; overflow:hidden;
+    -webkit-user-select:text; user-select:text; }
+  .hitem .hsrc{ font-size:12px; color:var(--ink-faint); line-height:1.45; margin:6px 0 0; }
+  .hitem .hact{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .hbtn{ font-family:var(--font); font-weight:600; font-size:12px; padding:8px 13px; border-radius:9px; cursor:pointer;
+    border:1px solid var(--stroke); background:#fff; color:var(--ink-soft); display:inline-flex; align-items:center; gap:6px; }
+  .hbtn:hover{ border-color:var(--stroke-2); color:var(--ink); }
+  .hbtn.primary{ background:var(--accent); color:#fff; border-color:transparent; }
+  .hbtn.primary:hover{ filter:brightness(1.08); color:#fff; }
+  .hbtn.on{ color:var(--accent-2); border-color:var(--accent-2); }
+  .hbtn.danger{ color:#b23b2e; border-color:rgba(178,59,46,0.3); }
+  .hbtn.danger:hover{ background:rgba(178,59,46,0.06); color:#b23b2e; border-color:rgba(178,59,46,0.5); }
+  .hempty{ text-align:center; color:var(--ink-faint); font-size:14px; margin:44px 0; line-height:1.6; }
+
+  /* ================= Settings tab ================= */
+  #settingsView{ width:100%; max-width:520px; }
+  .setgroup{ font-family:var(--font); font-weight:700; font-size:11.5px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--ink-faint); margin:24px 2px 9px; }
+  .setgroup.first{ margin-top:18px; }
+  .setlist{ display:flex; flex-direction:column; gap:12px; }
+  .seg{ display:inline-flex; flex:none; background:var(--panel); border:1px solid var(--stroke); border-radius:999px; padding:3px; gap:2px; }
+  .seg button{ border:none; background:transparent; cursor:pointer; font-family:var(--font); font-weight:600; font-size:12px;
+    color:var(--ink-faint); padding:6px 15px; border-radius:999px; transition:background .2s, color .2s; }
+  .seg button:hover{ color:var(--ink); }
+  .seg button.active{ background:var(--accent); color:#fff; }
+  .setsel{ flex:none; font-family:var(--font-text); font-size:13px; color:var(--ink); background:var(--panel);
+    border:1px solid var(--stroke); border-radius:10px; padding:9px 12px; cursor:pointer; min-width:158px; outline:none; }
+  .setsel:focus{ border-color:var(--accent-2); }
+  .setrow{ display:flex; align-items:center; gap:16px; background:var(--panel-2); border:1px solid var(--stroke);
+    border-radius:var(--r-md); padding:16px 18px; }
+  .setinfo{ flex:1; min-width:0; }
+  .setname{ font-family:var(--font); font-weight:700; font-size:14.5px; color:var(--ink); }
+  .setdesc{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; line-height:1.4; }
+  .setswitch{ position:relative; flex:none; width:52px; height:30px; border-radius:999px; cursor:pointer; padding:0;
+    background:var(--stroke-2); border:1px solid var(--stroke-2); transition:background .25s, border-color .25s; }
+  .setswitch b{ position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff;
+    box-shadow:0 2px 6px rgba(0,0,0,.35); transition:transform .25s; }
+  .setswitch[aria-pressed="true"]{ background:linear-gradient(120deg,var(--accent-2),var(--cyan)); border-color:transparent; }
+  .setswitch[aria-pressed="true"] b{ transform:translateX(22px); }
+
+  /* ================= Dark mode ================= */
+  html.dark{
+    --panel:#15161f;
+    --panel-2:#1e2030;
+    --glass:rgba(22,24,34,0.72);
+    --stroke:rgba(255,255,255,0.09);
+    --stroke-2:rgba(255,255,255,0.18);
+    --ink:#eef0fb;
+    --ink-soft:#a9adc6;
+    --ink-faint:#787b96;
+    --accent:#3a49b5;
+    --accent-2:#8ea0ff;
+    --good:#38c890;
+    --shadow:0 40px 90px -30px rgba(0,0,0,0.75);
+    --shadow-soft:0 14px 34px -16px rgba(0,0,0,0.55);
+  }
+  html.dark body{ color:var(--ink); }
+  html.dark .rail{ background:linear-gradient(180deg,#1b1d2b,#131420); }
+  /* raise-surfaces that were hardcoded white in light mode */
+  html.dark .rail button.active,
+  html.dark .rail .look.active,
+  html.dark .provswitch button.active,
+  html.dark .card:hover,
+  html.dark .pfield input:focus,
+  html.dark .pfield textarea:focus,
+  html.dark .plan .choose,
+  html.dark .hbtn{ background:#262a44; }
+  html.dark .plan.featured .choose,
+  html.dark .hbtn.primary{ background:var(--accent); color:#fff; }
+  html.dark .plan.current .choose{ background:transparent; }
+
+  /* composer */
+  .composer{ padding:14px clamp(16px,4vw,40px) 20px; border-top:1px solid var(--stroke); }
+  .field-wrap{ max-width:640px; margin:0 auto; background:var(--panel); border:1px solid var(--stroke-2);
+    border-radius:var(--r-lg); box-shadow:var(--shadow-soft); padding:14px 16px;}
+  .field{ display:flex; align-items:flex-end; gap:10px; }
+  .field .add{ width:30px; height:30px; flex:none; border-radius:9px; border:none; background:var(--panel-2); color:var(--ink-soft); cursor:pointer; display:grid; place-items:center; font-size:18px;}
+  .field textarea{ flex:1; border:none; outline:none; resize:none; background:transparent; font-family:var(--font-text);
+    font-size:15px; color:var(--ink); line-height:1.5; max-height:120px; min-height:24px; padding:4px 0; -webkit-user-select:text; user-select:text;}
+  .field textarea::placeholder{ color:var(--ink-faint); }
+  .subrow{ display:flex; align-items:center; gap:9px; margin-top:12px; }
+  .mini{ display:inline-flex; align-items:center; gap:7px; font-family:var(--font); font-weight:600; font-size:12.5px;
+    color:var(--ink-soft); background:transparent; border:1px solid var(--stroke); border-radius:999px; padding:7px 12px; cursor:pointer;}
+  .mini:hover{ border-color:var(--stroke-2); color:var(--ink); }
+  .mini.deep[aria-pressed="true"]{ background:linear-gradient(120deg, rgba(155,140,255,0.15), rgba(126,224,230,0.15)); color:var(--ink); border-color:var(--stroke-2);}
+  .mini.pro{ margin-left:auto; color:var(--good); border-color:rgba(31,157,107,0.4); }
+  .send{ flex:none; width:44px; height:44px; border-radius:13px; border:none; cursor:pointer; background:var(--accent); color:#fff;
+    display:grid; place-items:center; transition:transform .15s, filter .2s;}
+  .send:hover{ transform:scale(1.06); filter:brightness(1.1); }
+
+  svg{ display:block; }
+
+  /* ================= Sign in / Sign up gate ================= */
+  .authgate{ position:absolute; inset:0; z-index:50; display:flex; overflow:hidden;
+    background:var(--panel); border-radius:var(--r-xl); animation: appIn .3s cubic-bezier(.22,1,.36,1); }
+  .authgate[hidden]{ display:none; }
+  .auth-quit{ position:absolute; top:14px; right:16px; z-index:3; width:32px; height:32px; border:none;
+    border-radius:9px; background:rgba(255,255,255,.14); color:#fff; font-size:20px; line-height:1; cursor:pointer;
+    display:grid; place-items:center; transition:background .2s; }
+  .auth-quit:hover{ background:rgba(255,255,255,.28); }
+
+  /* left brand hero */
+  .auth-hero{ width:42%; min-width:300px; flex:none; position:relative; color:#fff; padding:52px 40px;
+    display:flex; flex-direction:column; justify-content:center; gap:14px;
+    background:
+      radial-gradient(120% 80% at 15% 10%, rgba(255,255,255,.16), transparent 55%),
+      radial-gradient(120% 90% at 100% 100%, rgba(0,0,0,.22), transparent 55%),
+      linear-gradient(155deg, #2160d8 0%, #0b3fa8 62%, #0a3596 100%); }
+  .auth-hero-logo{ width:60px; height:60px; border-radius:15px; box-shadow:0 10px 26px -8px rgba(0,0,0,.5); }
+  .auth-hero-name{ font-family:var(--font); font-weight:800; font-size:30px; letter-spacing:-0.02em; margin-top:6px; }
+  .auth-hero-tag{ font-size:15px; opacity:.9; margin-bottom:10px; }
+  .auth-hero-points{ list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:13px; }
+  .auth-hero-points li{ display:flex; align-items:flex-start; gap:10px; font-size:13.5px; line-height:1.35; opacity:.96; }
+  .auth-hero-points svg{ flex:none; margin-top:1px; color:#bcd3ff; }
+
+  /* right form panel */
+  .auth-panel{ flex:1; min-width:0; display:grid; place-items:center; padding:34px 30px; overflow:auto; }
+  .auth-card{ width:100%; max-width:340px; }
+  .auth-title{ font-family:var(--font); font-weight:750; font-size:23px; letter-spacing:-0.01em; color:var(--ink); margin:0 0 5px; }
+  .auth-subtitle{ font-size:13.5px; color:var(--ink-soft); margin:0 0 22px; }
+
+  .auth-social{ display:flex; flex-direction:column; gap:10px; }
+  .social-btn{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:11px 14px;
+    border:1px solid var(--stroke-2); border-radius:12px; background:var(--panel-2); color:var(--ink);
+    font-family:var(--font); font-weight:600; font-size:13.5px; cursor:pointer; transition:background .18s, border-color .18s, transform .1s; }
+  .social-btn:hover{ background:var(--panel); border-color:var(--accent-2); }
+  .social-btn:active{ transform:scale(.985); }
+
+  .auth-or{ display:flex; align-items:center; gap:12px; margin:18px 0; color:var(--ink-faint); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; }
+  .auth-or::before, .auth-or::after{ content:""; flex:1; height:1px; background:var(--stroke); }
+
+  .auth-label{ display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin:0 0 6px; }
+  .auth-input{ width:100%; padding:11px 13px; margin:0 0 15px; border:1px solid var(--stroke-2); border-radius:11px;
+    background:var(--panel-2); color:var(--ink); font-family:var(--font); font-size:14px; transition:border-color .18s, box-shadow .18s; }
+  .auth-input:focus{ outline:none; border-color:var(--accent-2); box-shadow:0 0 0 3px rgba(37,71,176,.16); background:var(--panel); }
+  .auth-input::placeholder{ color:var(--ink-faint); }
+
+  .auth-msg{ font-size:12.5px; line-height:1.4; padding:9px 12px; border-radius:10px; margin:0 0 14px; }
+  .auth-msg[hidden]{ display:none; }
+  .auth-msg.err{ background:rgba(214,69,69,.12); color:#c0392b; border:1px solid rgba(214,69,69,.25); }
+  .auth-msg.info{ background:rgba(37,71,176,.10); color:var(--accent-2); border:1px solid rgba(37,71,176,.22); }
+  .auth-msg.ok{ background:rgba(31,157,107,.12); color:var(--good); border:1px solid rgba(31,157,107,.25); }
+
+  .auth-submit{ width:100%; padding:12px 14px; border:none; border-radius:12px; background:var(--accent); color:#fff;
+    font-family:var(--font); font-weight:700; font-size:14px; cursor:pointer; transition:filter .18s, transform .1s; }
+  .auth-submit:hover{ filter:brightness(1.08); }
+  .auth-submit:active{ transform:scale(.99); }
+  .auth-submit:disabled{ opacity:.6; cursor:default; }
+
+  .auth-switch{ text-align:center; margin-top:18px; font-size:13px; color:var(--ink-soft); }
+  .auth-switch button{ border:none; background:none; color:var(--accent-2); font-family:var(--font); font-weight:700;
+    font-size:13px; cursor:pointer; padding:0 2px; }
+  .auth-switch button:hover{ text-decoration:underline; }
+  .auth-legal{ text-align:center; margin-top:20px; font-size:11px; color:var(--ink-faint); line-height:1.4; }
+
+  /* account row in Settings */
+  .acct-row{ display:flex; align-items:center; gap:12px; }
+  .acct-avatar{ width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center;
+    background:linear-gradient(135deg, var(--accent), #3a4bb0); color:#fff; font-weight:700; font-size:15px; }
+  .acct-email{ font-weight:600; color:var(--ink); font-size:13.5px; word-break:break-all; }
+
+  @media (max-width:720px){ .auth-hero{ display:none; } }
+</style>
+</head>
+<body>
+  <section class="app" id="app" role="dialog" aria-label="Kaeya">
+    <nav class="rail">
+      <div class="logo" aria-hidden="true">
+        <img src="kaeya-logo.png" alt="" draggable="false">
+      </div>
+      <button class="active" id="newChatBtn" title="New chat" aria-label="New chat">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button id="historyBtn" title="History" aria-label="History">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg>
+      </button>
+      <button id="savedBtn" title="Saved" aria-label="Saved">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <button class="look" id="lookBtn" title="Change Kaeya look" aria-label="Change Kaeya look">
+        <span class="orb mini"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+      </button>
+      <button id="personalizeBtn" title="Personalize" aria-label="Personalize">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </button>
+      <button id="subscriptionBtn" title="Plans &amp; subscription" aria-label="Plans and subscription">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3.5 10h11L21 8l-5 3.5L12 5 8 11.5 3 8z"/></svg>
+      </button>
+      <button id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      </button>
+      <div class="spacer"></div>
+      <div class="me" title="You"></div>
+    </nav>
+
+    <div class="main">
+      <div class="top" data-tauri-drag-region>
+        <span class="brand" data-tauri-drag-region>Kaeya</span>
+        <span class="ver">v1.0</span>
+        <span class="status">Ready</span>
+        <span class="provswitch" id="provSwitch" role="group" aria-label="Choose AI brain">
+          <button data-prov="openai" type="button">OpenAI</button>
+          <button data-prov="gemini" type="button">Gemini</button>
+        </span>
+        <button class="float-toggle" id="floatToggle" aria-pressed="true" title="Show the floating Kaeya ball on your screen edge">
+          Float on edge <span class="switch"><b></b></span>
+        </button>
+        <button class="x" id="closeBtn" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="content">
+        <div id="welcomeView">
+          <div class="hero-orb"><span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span></div>
+          <div class="reflection"></div>
+
+          <h2 class="welcome">Welcome to <b>Kaeya</b></h2>
+          <p class="sub">Select text anywhere on your screen, then tell Kaeya what to do &mdash; it rewrites it right where it sits.</p>
+
+          <div class="capture">
+            <div class="lbl">Selected text</div>
+            <div class="txt empty" id="capText">Highlight some text in any app, then tap the floating Kaeya ball.</div>
+          </div>
+
+          <div class="cards" id="cards">
+            <button class="card" data-p="Fix the grammar and spelling">
+              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              Fix grammar <span class="plus">+</span>
+            </button>
+            <button class="card" data-p="Make this shorter and punchier">
+              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9 3 12l3 3"/><path d="M18 9l3 3-3 3"/><path d="M9 5 15 19"/></svg></span>
+              Make it shorter <span class="plus">+</span>
+            </button>
+            <button class="card" data-p="Rewrite this in a formal tone">
+              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+              Change the tone <span class="plus">+</span>
+            </button>
+            <button class="card" data-p="Improve the overall writing">
+              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></span>
+              Improve writing <span class="plus">+</span>
+            </button>
+          </div>
+
+          <div class="result" id="result">
+            <div class="lbl">Kaeya suggests</div>
+            <div class="txt" id="resultText"></div>
+            <div class="row">
+              <button class="apply" id="applyBtn">Replace in document
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+              <button class="redo" id="redoBtn" type="button">Discard</button>
+              <button class="redo save-toggle" id="saveBtn" type="button" aria-pressed="false" title="Save this rewrite">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                <span id="saveBtnLabel">Save</span>
+              </button>
+            </div>
+            <div class="modeltag" id="modelTag" hidden></div>
+          </div>
+        </div><!-- /welcomeView -->
+
+        <div id="appearanceView" hidden>
+          <div class="appear-head">
+            <h2>Choose your Kaeya</h2>
+            <p>Pick the look for your floating ball. You can change it any time.</p>
+          </div>
+          <div class="picks" id="picks">
+            <button class="pick orb-kaeya selected" data-style="orb-kaeya">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Kaeya
+            </button>
+            <button class="pick orb-aurora" data-style="orb-aurora">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Aurora
+            </button>
+            <button class="pick orb-ocean" data-style="orb-ocean">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Ocean
+            </button>
+            <button class="pick orb-blossom" data-style="orb-blossom">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Blossom
+            </button>
+            <button class="pick orb-mint" data-style="orb-mint">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Mint
+            </button>
+            <button class="pick orb-ember" data-style="orb-ember">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Ember
+            </button>
+            <button class="pick orb-face" data-style="orb-face">
+              <span class="check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+              Pip
+            </button>
+          </div>
+          <button class="appear-done" id="appearDone">Done</button>
+        </div>
+
+        <div id="personalizeView" hidden>
+          <div class="appear-head">
+            <h2>Personalize Kaeya</h2>
+            <p>Tell Kaeya about you. It uses this to rewrite your text the way <em>you</em> like.</p>
+          </div>
+          <div class="pform">
+            <div class="pfield">
+              <label>What should Kaeya call you? <span class="hint">— your preferred name</span></label>
+              <input id="pName" type="text" maxlength="40" placeholder="e.g. Joseph" />
+            </div>
+            <div class="pfield">
+              <label>What do you do? <span class="hint">— your role or job</span></label>
+              <input id="pRole" type="text" maxlength="80" placeholder="e.g. Teacher, business owner, student" />
+            </div>
+            <div class="pfield">
+              <label>Your writing style <span class="hint">— tap any that fit, or type your own</span></label>
+              <div class="pchips" id="pStyleChips">
+                <button type="button" class="pchip" data-style="warm and friendly">Warm &amp; friendly</button>
+                <button type="button" class="pchip" data-style="short and to the point">Short &amp; to the point</button>
+                <button type="button" class="pchip" data-style="formal and professional">Formal</button>
+                <button type="button" class="pchip" data-style="simple, no big words">Simple words</button>
+                <button type="button" class="pchip" data-style="confident and persuasive">Persuasive</button>
+              </div>
+              <input id="pStyle" type="text" maxlength="120" placeholder="Describe your style in your own words (optional)" />
+            </div>
+            <div class="pfield">
+              <label>Your main goal <span class="hint">— what you use Kaeya for</span></label>
+              <textarea id="pGoals" maxlength="300" placeholder="e.g. Sound professional in work emails and messages."></textarea>
+            </div>
+            <div class="pfield">
+              <label>Anything else Kaeya should know? <span class="hint">— optional</span></label>
+              <textarea id="pNotes" maxlength="300" placeholder="e.g. I write in English but sometimes mix in local phrases."></textarea>
+            </div>
+          </div>
+          <button class="appear-done" id="personalizeSave">Save my details</button>
+          <p class="psaved" id="pSaved">Saved — Kaeya will use this from now on.</p>
+        </div>
+
+        <div id="subscriptionView" hidden>
+          <div class="appear-head">
+            <h2>Plans &amp; subscription</h2>
+            <p>Start free. Upgrade any time for stronger AI brains and more power.</p>
+          </div>
+          <div class="plans" id="plans">
+            <div class="plan current" data-plan="free">
+              <div class="pname">Starter</div>
+              <div class="price"><b>Free</b></div>
+              <div class="blurb">Everything you need to start rewriting text anywhere.</div>
+              <ul>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Rewrite text in any app</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Fast Gemini Flash brain</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> All floating-ball looks</li>
+              </ul>
+              <button class="choose" type="button" data-plan="free">Current plan</button>
+            </div>
+            <div class="plan featured" data-plan="pro">
+              <span class="tagpop">Most popular</span>
+              <div class="pname">Pro</div>
+              <div class="price"><b>$8</b> <span>/ month</span></div>
+              <div class="blurb">The strongest brains and every power feature, unlocked.</div>
+              <ul>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Everything in Starter</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Top brains: GPT-4o &amp; Gemini Pro</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Deep think on every task</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Priority speed</li>
+              </ul>
+              <button class="choose" type="button" data-plan="pro">Upgrade to Pro</button>
+            </div>
+            <div class="plan" data-plan="team">
+              <div class="pname">Team</div>
+              <div class="price"><b>$6</b> <span>/ user / mo</span></div>
+              <div class="blurb">For offices and teams who write together.</div>
+              <ul>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Everything in Pro</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Shared team billing</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Central key management</li>
+              </ul>
+              <button class="choose" type="button" data-plan="team">Contact us</button>
+            </div>
+          </div>
+          <p class="pay-note">Payments open soon via Paystack &amp; Flutterwave (built for Liberia &amp; Africa).<br/>Nothing is charged yet — Starter stays free.</p>
+        </div>
+
+        <div id="historyView" hidden>
+          <div class="appear-head">
+            <h2>History</h2>
+            <p>Every rewrite Kaeya makes is saved here on your computer.</p>
+          </div>
+          <div class="listtools" id="historyTools" hidden>
+            <button class="hbtn danger" id="historyClear" type="button">Clear all history</button>
+          </div>
+          <div class="hlist" id="historyList"></div>
+        </div>
+
+        <div id="savedView" hidden>
+          <div class="appear-head">
+            <h2>Saved</h2>
+            <p>Rewrites you bookmarked, kept for whenever you need them.</p>
+          </div>
+          <div class="hlist" id="savedList"></div>
+        </div>
+
+        <div id="settingsView" hidden>
+          <div class="appear-head">
+            <h2>Settings</h2>
+            <p>Make Kaeya yours.</p>
+          </div>
+
+          <div class="setgroup first">Account</div>
+          <div class="setlist">
+            <div class="setrow">
+              <div class="setinfo acct-row">
+                <div class="acct-avatar" id="acctAvatar">K</div>
+                <div>
+                  <div class="acct-email" id="acctEmail">—</div>
+                  <div class="setdesc">Signed in to Kaeya</div>
+                </div>
+              </div>
+              <button class="hbtn danger" id="signOutBtn" type="button">Sign out</button>
+            </div>
+          </div>
+
+          <div class="setgroup">Appearance</div>
+          <div class="setlist">
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Dark mode</div>
+                <div class="setdesc">Switch Kaeya to a dark, easy-on-the-eyes theme.</div>
+              </div>
+              <button class="setswitch" id="darkToggle" type="button" aria-pressed="false" aria-label="Toggle dark mode"><b></b></button>
+            </div>
+          </div>
+
+          <div class="setgroup">The floating ball</div>
+          <div class="setlist">
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Show the floating ball</div>
+                <div class="setdesc">Keep the Kaeya ball docked on your screen edge, ready anytime.</div>
+              </div>
+              <button class="setswitch" id="orbVisToggle" type="button" aria-pressed="true" aria-label="Show the floating ball"><b></b></button>
+            </div>
+          </div>
+
+          <div class="setgroup">Writing</div>
+          <div class="setlist">
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Default AI brain</div>
+                <div class="setdesc">Which AI Kaeya uses first. (Gemini is free right now.)</div>
+              </div>
+              <span class="seg" id="defBrain" role="group" aria-label="Default AI brain">
+                <button type="button" data-prov="openai">OpenAI</button>
+                <button type="button" data-prov="gemini">Gemini</button>
+              </span>
+            </div>
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Quick action</div>
+                <div class="setdesc">Double-tap the ball to do this instantly and replace your text — no window. (Single tap still opens Kaeya.)</div>
+              </div>
+              <select class="setsel" id="defAction" aria-label="Default action">
+                <option value="ask">Ask me what to do</option>
+                <option value="fix">Fix grammar</option>
+                <option value="improve">Improve writing</option>
+                <option value="shorter">Make it shorter</option>
+                <option value="tone">Make it formal</option>
+                <option value="translate">Translate it</option>
+              </select>
+            </div>
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Translate into</div>
+                <div class="setdesc">The language Kaeya uses when you ask it to translate.</div>
+              </div>
+              <select class="setsel" id="defLang" aria-label="Translate language">
+                <option value="English">English</option>
+                <option value="French">French</option>
+                <option value="Spanish">Spanish</option>
+                <option value="Portuguese">Portuguese</option>
+                <option value="Arabic">Arabic</option>
+                <option value="Swahili">Swahili</option>
+                <option value="Chinese">Chinese</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setgroup">Safety &amp; privacy</div>
+          <div class="setlist">
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Preview before replacing</div>
+                <div class="setdesc">Show the rewrite and let you approve it before it replaces your text.</div>
+              </div>
+              <button class="setswitch" id="previewToggle" type="button" aria-pressed="true" aria-label="Preview before replacing"><b></b></button>
+            </div>
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Save my history</div>
+                <div class="setdesc">Keep a local list of your rewrites. Turn off if you'd rather keep nothing.</div>
+              </div>
+              <button class="setswitch" id="histToggle" type="button" aria-pressed="true" aria-label="Save my history"><b></b></button>
+            </div>
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Clear all my data</div>
+                <div class="setdesc">Erase your History, Saved items and personal details from this PC.</div>
+              </div>
+              <button class="hbtn danger" id="clearData" type="button">Clear&nbsp;data</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <div class="field-wrap">
+          <div class="field">
+            <button class="add" aria-label="Add">+</button>
+            <textarea id="input" rows="1" placeholder="Describe what you want Kaeya to do with your text..."></textarea>
+            <button class="send" id="sendBtn" aria-label="Send">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+          <div class="subrow">
+            <button class="mini" id="attach">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 18.5a1.6 1.6 0 0 1-2.3-2.3L15 9"/></svg>
+              Attach
+            </button>
+            <button class="mini deep" id="deep" aria-pressed="false">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+              Deep think
+            </button>
+            <span class="mini pro">Pro</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ============ Sign in / Sign up gate ============ -->
+    <div id="authGate" class="authgate" hidden>
+      <button class="auth-quit" id="authQuit" aria-label="Close" title="Close">&times;</button>
+
+      <!-- left: brand hero -->
+      <div class="auth-hero" data-tauri-drag-region>
+        <img class="auth-hero-logo" src="kaeya-logo.png" alt="" draggable="false">
+        <div class="auth-hero-name">Kaeya</div>
+        <div class="auth-hero-tag">Your AI writing companion.</div>
+        <ul class="auth-hero-points">
+          <li><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Rewrite text in any app, right where it sits</li>
+          <li><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Fix grammar, change tone, translate, shorten</li>
+          <li><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Private &amp; secure — your keys stay on our server</li>
+        </ul>
+      </div>
+
+      <!-- right: form -->
+      <div class="auth-panel">
+        <div class="auth-card">
+          <h1 class="auth-title" id="authTitle">Welcome back</h1>
+          <p class="auth-subtitle" id="authSubtitle">Sign in to continue to Kaeya</p>
+
+          <div class="auth-social">
+            <button type="button" class="social-btn" data-prov="google">
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.6 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.6 5.6C41.9 36.7 44 31 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+              Continue with Google
+            </button>
+            <button type="button" class="social-btn" data-prov="facebook">
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z"/></svg>
+              Continue with Facebook
+            </button>
+          </div>
+
+          <div class="auth-or"><span>or use your email</span></div>
+
+          <form id="authForm" novalidate>
+            <label class="auth-label" for="authEmail">Email</label>
+            <input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" required>
+
+            <label class="auth-label" for="authPass">Password</label>
+            <input class="auth-input" id="authPass" type="password" autocomplete="current-password" placeholder="Your password" required>
+
+            <div class="auth-msg" id="authMsg" hidden></div>
+
+            <button class="auth-submit" id="authSubmit" type="submit">Sign in</button>
+          </form>
+
+          <div class="auth-switch">
+            <span id="authSwitchText">New to Kaeya?</span>
+            <button type="button" id="authSwitchBtn">Create an account</button>
+          </div>
+
+          <p class="auth-legal">By continuing, you agree to Kaeya's Terms of Service and Privacy Policy.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<script src="kaeya-auth.js"></script>
+<script src="konx-ai.js"></script>
+<script>
+(function(){
+  var TAURI = window.__TAURI__ || {};
+  var invoke = (TAURI.core && TAURI.core.invoke) ? TAURI.core.invoke : function(){ return Promise.resolve(); };
+  var emit   = (TAURI.event && TAURI.event.emit)   ? TAURI.event.emit   : function(){};
+  var listen = (TAURI.event && TAURI.event.listen) ? TAURI.event.listen : function(){};
+
+  var $ = function(id){ return document.getElementById(id); };
+  var app=$('app'), input=$('input'), result=$('result'), resultText=$('resultText'), capText=$('capText');
+  var floatToggle=$('floatToggle'), deep=$('deep');
+  var STYLES=['orb-kaeya','orb-aurora','orb-ocean','orb-blossom','orb-mint','orb-ember','orb-face'];
+
+  // The text currently captured from the user's other app.
+  var captured = '';
+
+  // The "brain" (model routing + text generation) lives in konx-ai.js -> window.KonxAI.
+  var modelTag = $('modelTag');
+  function deepOn(){ return deep.getAttribute('aria-pressed') === 'true'; }
+
+  // A short, friendly note explaining why the real AI wasn't used.
+  function reasonNote(reason){
+    if(reason === 'limit')   return ' <span class="tier warn">daily limit reached — try again tomorrow or upgrade</span>';
+    if(reason === 'auth')    return ' <span class="tier warn">please sign in again</span>';
+    if(reason === 'no-key')  return ' <span class="tier warn">no API key found</span>';
+    if(reason === 'billing') return ' <span class="tier warn">needs billing/credit</span>';
+    if(reason === 'offline') return ' <span class="tier warn">AI unavailable</span>';
+    return '';
+  }
+
+  /* ---------- captured text ---------- */
+  function setCaptured(text){
+    captured = (text || '').trim();
+    result.classList.remove('show');
+    if(captured){
+      capText.textContent = captured;
+      capText.classList.remove('empty');
+    } else {
+      capText.textContent = 'Highlight some text in any app, then tap the floating Kaeya ball.';
+      capText.classList.add('empty');
+    }
+    input.value = '';
+    input.style.height = 'auto';
+  }
+  // When the orb captures text (single tap), it fires this event with the copied text.
+  listen('konx-captured', function(e){
+    setCaptured(e.payload);
+    maybeAutoAction();   // if the user set a default action, run it now
+  });
+
+  /* ---------- quick mode: DOUBLE-tap the orb -> silent transform + replace ----------
+     No window opens. The orb (which stays visible) shows working/done feedback.     */
+  var quickBusy = false, quickWatch = null;
+  function orbState(s){ try{ emit('konx-quick-state', s); }catch(e){} }
+  function endQuick(){ quickBusy = false; if(quickWatch){ clearTimeout(quickWatch); quickWatch = null; } }
+  function quickAction(){
+    if(quickBusy) return;
+    quickBusy = true;
+    // Safety net: never let a hung call leave quick mode stuck.
+    quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 25000);
+    invoke('quick_capture').then(function(raw){
+      var text = (raw || '').trim();
+      if(!text){ orbState('empty'); endQuick(); return; }
+
+      var act = getSetting('konx-defaction','ask');
+      if(act === 'ask'){
+        // No default action chosen -> fall back to opening the window like a single tap.
+        return invoke('open_konx').then(function(t){ setCaptured(t || text); endQuick(); });
+      }
+
+      var ins = (act === 'translate')
+        ? ('Translate this into ' + getSetting('konx-lang','English'))
+        : ACTIONS[act];
+
+      orbState('working');
+      return KonxAI.run(text, ins, { deepThink:false }).then(function(out){
+        if(histOn()){
+          addHistory({
+            id: 'k' + Date.now() + '-' + Math.floor(Math.random()*1000),
+            ts: Date.now(), instruction: ins, source: text,
+            result: out.text, model: out.modelLabel, tier: out.tier, engine: out.engine
+          });
+        }
+        return invoke('apply_text', { text: out.text }).then(function(){
+          // Green flash = real AI. Amber flash = fell back to the demo brain.
+          orbState(out.engine === 'mock' ? 'demo' : 'done'); endQuick();
+        });
+      });
+    }).catch(function(){ orbState('empty'); endQuick(); });
+  }
+  listen('konx-quick', quickAction);
+
+  /* ============================================================
+     History + Saved — stored locally on THIS PC (no login needed).
+     History = every rewrite Kaeya makes. Saved = ones you bookmark.
+     ============================================================ */
+  var HKEY='konx-history', SKEY='konx-saved', HMAX=100;
+  var lastEntry = null;                 // the rewrite currently shown in the result card
+  var saveBtn=$('saveBtn'), saveBtnLabel=$('saveBtnLabel');
+
+  function loadList(key){ try{ return JSON.parse(localStorage.getItem(key)||'[]')||[]; }catch(e){ return []; } }
+  function putList(key,arr){ try{ localStorage.setItem(key, JSON.stringify(arr)); }catch(e){} }
+  function isSaved(id){ return loadList(SKEY).some(function(x){ return x.id===id; }); }
+  function esc(t){ var d=document.createElement('div'); d.textContent=(t==null?'':t); return d.innerHTML; }
+  function snippet(t,n){ t=(t||'').trim(); return t.length>n ? t.slice(0,n).trim()+'…' : t; }
+  function timeAgo(ts){
+    var s=Math.floor((Date.now()-ts)/1000);
+    if(s<60) return 'just now';
+    var m=Math.floor(s/60); if(m<60) return m+(m===1?' min ago':' mins ago');
+    var h=Math.floor(m/60); if(h<24) return h+(h===1?' hour ago':' hours ago');
+    var d=Math.floor(h/24); if(d<7) return d+(d===1?' day ago':' days ago');
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function addHistory(entry){
+    var h=loadList(HKEY); h.unshift(entry); if(h.length>HMAX) h=h.slice(0,HMAX); putList(HKEY,h);
+  }
+  function findEntry(id){
+    return loadList(HKEY).concat(loadList(SKEY)).filter(function(x){return x.id===id;})[0]
+           || (lastEntry && lastEntry.id===id ? lastEntry : null);
+  }
+  // Add or remove an entry from the Saved list. Returns true if it is now saved.
+  function toggleSave(id){
+    var s=loadList(SKEY), idx=s.map(function(x){return x.id;}).indexOf(id);
+    if(idx!==-1){ s.splice(idx,1); putList(SKEY,s); return false; }
+    var e=findEntry(id); if(e) s.unshift(e); putList(SKEY,s); return true;
+  }
+  function deleteFrom(key,id){
+    putList(key, loadList(key).filter(function(x){return x.id!==id;}));
+  }
+
+  function itemHTML(e, saved){
+    return '<div class="hitem" data-id="'+esc(e.id)+'">'
+      + '<div class="hins">'+ esc(e.instruction||'Rewrite') +'<span class="htime">'+ timeAgo(e.ts) +'</span></div>'
+      + '<div class="htext">'+ esc(e.result) +'</div>'
+      + '<div class="hsrc">From: '+ esc(snippet(e.source,120)) +'</div>'
+      + '<div class="hact">'
+      +   '<button class="hbtn primary" data-act="reuse">Use again</button>'
+      +   '<button class="hbtn'+(saved?' on':'')+'" data-act="save">'+(saved?'Saved ✓':'Save')+'</button>'
+      +   '<button class="hbtn danger" data-act="del">Delete</button>'
+      + '</div></div>';
+  }
+  function renderHistory(){
+    var list=$('historyList'), tools=$('historyTools'), h=loadList(HKEY);
+    tools.hidden = (h.length===0);
+    list.innerHTML = h.length
+      ? h.map(function(e){ return itemHTML(e, isSaved(e.id)); }).join('')
+      : '<div class="hempty">No history yet.<br/>Rewrite some text and it will appear here.</div>';
+  }
+  function renderSaved(){
+    var list=$('savedList'), s=loadList(SKEY);
+    list.innerHTML = s.length
+      ? s.map(function(e){ return itemHTML(e, true); }).join('')
+      : '<div class="hempty">Nothing saved yet.<br/>Tap &ldquo;Save&rdquo; on a rewrite to keep it here.</div>';
+  }
+
+  // Load a past entry back onto the main screen so it can be reused / re-applied.
+  function reuseEntry(id){
+    var e=findEntry(id); if(!e) return;
+    setCaptured(e.source);
+    lastEntry = e;
+    resultText.textContent = e.result;
+    modelTag.hidden = true;
+    result.classList.add('show');
+    paintSaveBtn();
+    setView('welcome');
+    result.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  // The Save toggle shown on a fresh result.
+  function paintSaveBtn(){
+    var on = !!(lastEntry && isSaved(lastEntry.id));
+    saveBtn.setAttribute('aria-pressed', on?'true':'false');
+    saveBtnLabel.textContent = on ? 'Saved' : 'Save';
+  }
+  saveBtn.addEventListener('click', function(){
+    if(!lastEntry) return;
+    toggleSave(lastEntry.id);
+    paintSaveBtn();
+  });
+
+  // Clicks inside either list (Use again / Save / Delete).
+  function wireList(listId, rerender, storeKey){
+    $(listId).addEventListener('click', function(e){
+      var btn=e.target.closest('.hbtn'); if(!btn) return;
+      var card=e.target.closest('.hitem'); if(!card) return;
+      var id=card.getAttribute('data-id'), act=btn.getAttribute('data-act');
+      if(act==='reuse'){ reuseEntry(id); }
+      else if(act==='save'){ toggleSave(id); paintSaveBtn(); rerender(); }
+      else if(act==='del'){ deleteFrom(storeKey, id); paintSaveBtn(); rerender(); }
+    });
+  }
+  wireList('historyList', renderHistory, HKEY);
+  wireList('savedList',   renderSaved,   SKEY);
+  $('historyClear').addEventListener('click', function(){
+    putList(HKEY, []); renderHistory();
+  });
+
+  /* ---------- run / apply ---------- */
+  var running = false;
+  function run(ins){
+    if(running) return;
+    if(!captured){
+      modelTag.hidden = true;
+      resultText.textContent = 'Select some text in your app first, then tap the Kaeya ball and try again.';
+      result.classList.add('show');
+      return;
+    }
+    running = true;
+    modelTag.hidden = true;
+    resultText.textContent = 'Kaeya is thinking…';
+    result.classList.add('show');
+    result.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+    KonxAI.run(captured, ins, { deepThink: deepOn() }).then(function(out){
+      resultText.textContent = out.text;
+      modelTag.innerHTML =
+        '<span class="dot"></span> Handled by <b>' + out.modelLabel + '</b>' +
+        ' <span class="tier">' + (out.tier === 'large' ? 'big task' : 'quick task') + '</span>' +
+        (out.engine === 'mock'
+          ? ' <span class="tier warn">demo brain</span>' + reasonNote(out.reason)
+          : ' <span class="tier">live</span>');
+      modelTag.hidden = false;
+      running = false;
+
+      // Record this rewrite in local History (if the user keeps history on).
+      lastEntry = {
+        id: 'k' + Date.now() + '-' + Math.floor(Math.random()*1000),
+        ts: Date.now(), instruction: ins, source: captured,
+        result: out.text, model: out.modelLabel, tier: out.tier, engine: out.engine
+      };
+      if(histOn()) addHistory(lastEntry);
+      paintSaveBtn();
+      if(!previewOn()) applyResult();   // "preview before replacing" is off -> replace straight away
+    }).catch(function(){
+      resultText.textContent = 'Something went wrong. Please try again.';
+      running = false;
+    });
+  }
+
+  $('cards').addEventListener('click', function(e){
+    var c = e.target.closest('.card'); if(!c) return;
+    input.value = c.getAttribute('data-p'); run(input.value);
+  });
+  $('sendBtn').addEventListener('click', function(){ if(input.value.trim()) run(input.value); });
+  input.addEventListener('keydown', function(e){
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); if(input.value.trim()) run(input.value); }
+  });
+  input.addEventListener('input', function(){
+    input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px';
+  });
+
+  // Replace in document -> hand the new text to the engine, which pastes it back in place.
+  function applyResult(){
+    var text = resultText.textContent;
+    if(!captured || !text) return;
+    invoke('apply_text', { text: text });   // Rust hides this window + pastes over the selection
+    result.classList.remove('show');
+  }
+  $('applyBtn').addEventListener('click', function(){ if(!running) applyResult(); });
+  $('redoBtn').addEventListener('click', function(){ result.classList.remove('show'); });
+
+  // Close (x) or Escape -> hide the window (engine keeps running in the tray/orb).
+  $('closeBtn').addEventListener('click', function(){ invoke('hide_main'); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') invoke('hide_main'); });
+
+  deep.addEventListener('click', function(){
+    deep.setAttribute('aria-pressed', deep.getAttribute('aria-pressed')==='true' ? 'false' : 'true');
+  });
+
+  /* ---------- float-on-edge toggle -> shows/hides the orb window ---------- */
+  function setFloat(on){
+    floatToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    var ovt = $('orbVisToggle'); if(ovt) ovt.setAttribute('aria-pressed', on ? 'true' : 'false');
+    invoke('set_orb_visible', { visible: on });
+    try { localStorage.setItem('konx-float', on ? '1' : '0'); } catch(e){}
+  }
+  floatToggle.addEventListener('click', function(){
+    setFloat(floatToggle.getAttribute('aria-pressed') !== 'true');
+  });
+
+  /* ---------- OpenAI / Gemini brain switch ---------- */
+  var provSwitch = $('provSwitch');
+  function paintProv(){
+    var active = KonxAI.config.activeProvider;
+    var btns = provSwitch.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('active', btns[i].getAttribute('data-prov')===active); }
+  }
+  provSwitch.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var prov = b.getAttribute('data-prov');
+    KonxAI.setProvider(prov);
+    try { localStorage.setItem('konx-provider', prov); } catch(err){}
+    paintProv();
+    if(typeof paintDefBrain==='function') paintDefBrain();   // keep the Settings copy in sync
+  });
+  try {
+    var savedProv = localStorage.getItem('konx-provider');
+    if(savedProv) KonxAI.setProvider(savedProv);
+  } catch(e){}
+  paintProv();
+
+  /* ---------- tab / view switching ---------- */
+  var lookBtn=$('lookBtn'), appearDone=$('appearDone'), picks=$('picks');
+  var newChatBtn=$('newChatBtn'), personalizeBtn=$('personalizeBtn'), subscriptionBtn=$('subscriptionBtn');
+  var historyBtn=$('historyBtn'), savedBtn=$('savedBtn'), settingsBtn=$('settingsBtn');
+
+  // Each tab = a full-screen view in the content area + the rail button that opens it.
+  var VIEWS = {
+    welcome:      { el: $('welcomeView'),      btn: newChatBtn },
+    appearance:   { el: $('appearanceView'),   btn: lookBtn },
+    personalize:  { el: $('personalizeView'),  btn: personalizeBtn },
+    subscription: { el: $('subscriptionView'), btn: subscriptionBtn },
+    history:      { el: $('historyView'),      btn: historyBtn },
+    saved:        { el: $('savedView'),        btn: savedBtn },
+    settings:     { el: $('settingsView'),     btn: settingsBtn }
+  };
+  function setView(v){
+    if(v==='history') renderHistory();   // refresh the list each time it opens
+    if(v==='saved')   renderSaved();
+    Object.keys(VIEWS).forEach(function(k){
+      var item = VIEWS[k], on = (k===v);
+      item.el.hidden = !on;
+      if(item.btn) item.btn.classList.toggle('active', on);
+    });
+    app.classList.toggle('subview', v!=='welcome');  // hide the composer on full-screen tabs
+    var host = VIEWS[v] && VIEWS[v].el && VIEWS[v].el.parentElement;
+    if(host) host.scrollTop = 0;
+  }
+  personalizeBtn.addEventListener('click', function(){ setView('personalize'); });
+  subscriptionBtn.addEventListener('click', function(){ setView('subscription'); });
+  historyBtn.addEventListener('click', function(){ setView('history'); });
+  savedBtn.addEventListener('click', function(){ setView('saved'); });
+  settingsBtn.addEventListener('click', function(){ setView('settings'); });
+
+  /* ---------- dark mode (lives in Settings) ---------- */
+  var darkToggle=$('darkToggle');
+  function applyTheme(dark, persist){
+    document.documentElement.classList.toggle('dark', !!dark);
+    darkToggle.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    if(persist){ try{ localStorage.setItem('konx-theme', dark ? 'dark' : 'light'); }catch(e){} }
+  }
+  darkToggle.addEventListener('click', function(){
+    applyTheme(darkToggle.getAttribute('aria-pressed') !== 'true', true);
+  });
+
+  /* ---------- other Settings (all saved locally on this PC) ---------- */
+  var ACTIONS = {
+    fix:'Fix the grammar and spelling',
+    improve:'Improve the overall writing',
+    shorter:'Make this shorter and punchier',
+    tone:'Rewrite this in a formal tone'
+    // 'translate' is handled specially (uses the chosen language)
+  };
+  function getSetting(k, dflt){ try{ var v=localStorage.getItem(k); return v===null?dflt:v; }catch(e){ return dflt; } }
+  function setSetting(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+
+  // Small helpers the run/apply code above asks about.
+  function previewOn(){ return getSetting('konx-preview','1') !== '0'; }
+  function histOn(){ return getSetting('konx-savehist','1') !== '0'; }
+
+  // Run the chosen default action right after the ball grabs text.
+  function maybeAutoAction(){
+    if(!captured) return;
+    var act = getSetting('konx-defaction','ask');
+    if(!act || act==='ask') return;
+    var ins = (act==='translate') ? ('Translate this into ' + getSetting('konx-lang','English')) : ACTIONS[act];
+    if(ins) run(ins);
+  }
+
+  // A reusable on/off switch button bound to a localStorage key.
+  function wireSwitch(btn, key, onDefault, onChange){
+    function paint(on){ btn.setAttribute('aria-pressed', on ? 'true':'false'); }
+    var on = getSetting(key, onDefault ? '1':'0') !== '0';
+    paint(on);
+    btn.addEventListener('click', function(){
+      on = btn.getAttribute('aria-pressed') !== 'true';
+      paint(on); setSetting(key, on ? '1':'0');
+      if(onChange) onChange(on);
+    });
+    return { isOn:function(){ return btn.getAttribute('aria-pressed')==='true'; }, set:function(v){ on=v; paint(v); setSetting(key, v?'1':'0'); } };
+  }
+
+  // Show the floating ball — keep it in sync with the top-bar "Float on edge" toggle.
+  var orbVis = wireSwitch($('orbVisToggle'), 'konx-float', true, function(on){
+    floatToggle.setAttribute('aria-pressed', on ? 'true':'false');
+    invoke('set_orb_visible', { visible: on });
+  });
+
+  // Preview-before-replacing + Save-history are read live via previewOn()/histOn().
+  wireSwitch($('previewToggle'), 'konx-preview', true);
+  wireSwitch($('histToggle'), 'konx-savehist', true);
+
+  // Default AI brain (segmented) — shares state with the top-bar OpenAI/Gemini switch.
+  var defBrain = $('defBrain');
+  function paintDefBrain(){
+    var active = KonxAI.config.activeProvider;
+    var btns = defBrain.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('active', btns[i].getAttribute('data-prov')===active); }
+  }
+  defBrain.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var prov = b.getAttribute('data-prov');
+    KonxAI.setProvider(prov); setSetting('konx-provider', prov);
+    paintDefBrain(); if(typeof paintProv==='function') paintProv();
+  });
+  paintDefBrain();   // reflect the restored provider on load
+
+  // Default action + translate language dropdowns.
+  var defAction=$('defAction'), defLang=$('defLang');
+  defAction.value = getSetting('konx-defaction','ask');
+  defLang.value   = getSetting('konx-lang','English');
+  defAction.addEventListener('change', function(){ setSetting('konx-defaction', defAction.value); });
+  defLang.addEventListener('change', function(){ setSetting('konx-lang', defLang.value); });
+
+  // Clear all my data — two-tap confirm so it can't happen by accident.
+  var clearData=$('clearData'), clearArmed=false, clearTimer=null;
+  clearData.addEventListener('click', function(){
+    if(!clearArmed){
+      clearArmed=true; clearData.textContent='Tap again to confirm'; clearData.classList.add('on');
+      clearTimer=setTimeout(function(){ clearArmed=false; clearData.innerHTML='Clear&nbsp;data'; clearData.classList.remove('on'); }, 3500);
+      return;
+    }
+    clearTimeout(clearTimer); clearArmed=false;
+    ['konx-history','konx-saved','konx-persona'].forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
+    KonxAI.setPersona({});
+    lastEntry=null; paintSaveBtn();
+    renderHistory(); renderSaved();
+    if(typeof loadPersona==='function') loadPersona();
+    clearData.innerHTML='Cleared ✓'; clearData.classList.remove('on');
+    setTimeout(function(){ clearData.innerHTML='Clear&nbsp;data'; }, 2000);
+  });
+
+  function applyStyle(s, persist){
+    if(STYLES.indexOf(s) === -1) return;
+    var html = document.documentElement;
+    STYLES.forEach(function(x){ html.classList.remove(x); });
+    html.classList.add(s);
+    var all = picks.querySelectorAll('.pick');
+    for(var i=0;i<all.length;i++){ all[i].classList.toggle('selected', all[i].getAttribute('data-style')===s); }
+    if(persist){
+      try { localStorage.setItem('konx-style', s); } catch(e){}
+      emit('konx-style', s);   // tell the floating orb window to change its look too
+    }
+  }
+
+  lookBtn.addEventListener('click', function(){ setView('appearance'); });
+  appearDone.addEventListener('click', function(){ setView('welcome'); });
+  newChatBtn.addEventListener('click', function(){ setView('welcome'); });
+  picks.addEventListener('click', function(e){
+    var p = e.target.closest('.pick'); if(p) applyStyle(p.getAttribute('data-style'), true);
+  });
+
+  /* ---------- Personalize tab ---------- */
+  var pName=$('pName'), pRole=$('pRole'), pStyle=$('pStyle'), pGoals=$('pGoals'), pNotes=$('pNotes');
+  var pStyleChips=$('pStyleChips'), personalizeSave=$('personalizeSave'), pSaved=$('pSaved');
+
+  function paintChips(){
+    var val = (pStyle.value||'').toLowerCase();
+    var chips = pStyleChips.querySelectorAll('.pchip');
+    for(var i=0;i<chips.length;i++){
+      chips[i].classList.toggle('on', val.indexOf(chips[i].getAttribute('data-style'))!==-1);
+    }
+  }
+  // Tapping a style chip adds/removes its phrase in the free-text style box.
+  pStyleChips.addEventListener('click', function(e){
+    var c = e.target.closest('.pchip'); if(!c) return;
+    var phrase = c.getAttribute('data-style');
+    var parts = pStyle.value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var low = parts.map(function(s){return s.toLowerCase();});
+    var idx = low.indexOf(phrase.toLowerCase());
+    if(idx===-1) parts.push(phrase); else parts.splice(idx,1);
+    pStyle.value = parts.join(', ');
+    paintChips();
+  });
+  pStyle.addEventListener('input', paintChips);
+
+  function readPersona(){
+    return { name:pName.value.trim(), role:pRole.value.trim(), style:pStyle.value.trim(),
+             goals:pGoals.value.trim(), notes:pNotes.value.trim() };
+  }
+  function loadPersona(){
+    var p = {};
+    try { p = JSON.parse(localStorage.getItem('konx-persona')||'{}') || {}; } catch(e){}
+    pName.value=p.name||''; pRole.value=p.role||''; pStyle.value=p.style||'';
+    pGoals.value=p.goals||''; pNotes.value=p.notes||'';
+    paintChips();
+    KonxAI.setPersona(p);   // make the brain use it right away
+  }
+  personalizeSave.addEventListener('click', function(){
+    var p = readPersona();
+    try { localStorage.setItem('konx-persona', JSON.stringify(p)); } catch(e){}
+    KonxAI.setPersona(p);
+    pSaved.classList.add('show');
+    setTimeout(function(){ pSaved.classList.remove('show'); }, 2600);
+  });
+
+  /* ---------- Subscription tab ---------- */
+  var plans=$('plans'), payNote=document.querySelector('.pay-note');
+  plans.addEventListener('click', function(e){
+    var b = e.target.closest('.choose'); if(!b) return;
+    var plan = b.getAttribute('data-plan');
+    if(plan==='free') return;   // already the current plan
+    payNote.innerHTML = 'Payments aren\'t open yet — but you\'re on the list for <b>' +
+      (plan==='team' ? 'Team' : 'Pro') + '</b>. We\'ll turn it on the moment ' +
+      'Paystack &amp; Flutterwave go live. Starter stays free until then.';
+  });
+
+  /* ================= Sign in / Sign up gate ================= */
+  var Auth = window.KaeyaAuth;
+  var authGate=$('authGate'), authForm=$('authForm'), authEmail=$('authEmail'), authPass=$('authPass');
+  var authSubmit=$('authSubmit'), authMsg=$('authMsg'), authTitle=$('authTitle'), authSubtitle=$('authSubtitle');
+  var authSwitchText=$('authSwitchText'), authSwitchBtn=$('authSwitchBtn'), authQuit=$('authQuit');
+  var authMode='signin';
+
+  function showAuthMsg(kind, text){
+    if(!text){ authMsg.hidden=true; return; }
+    authMsg.className='auth-msg '+kind;
+    authMsg.textContent=text;
+    authMsg.hidden=false;
+  }
+  function renderAuthMode(){
+    var up = authMode==='signup';
+    authTitle.textContent    = up ? 'Create your account' : 'Welcome back';
+    authSubtitle.textContent = up ? 'Start rewriting smarter with Kaeya' : 'Sign in to continue to Kaeya';
+    authSubmit.textContent   = up ? 'Create account' : 'Sign in';
+    authSwitchText.textContent = up ? 'Already have an account?' : 'New to Kaeya?';
+    authSwitchBtn.textContent  = up ? 'Sign in' : 'Create an account';
+    authPass.setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+    showAuthMsg('', '');
+  }
+  function paintAccount(){
+    var u = Auth ? Auth.user() : null;
+    var email = (u && u.email) ? u.email : '';
+    var el=$('acctEmail'), av=$('acctAvatar');
+    if(el) el.textContent = email || '—';
+    if(av) av.textContent = (email ? email.charAt(0) : 'K').toUpperCase();
+  }
+  function showGate(){ if(authGate) authGate.hidden=false; }
+  function hideGate(){ if(authGate) authGate.hidden=true; }
+  function onSignedIn(){ paintAccount(); hideGate(); setView('welcome'); }
+
+  function friendlyAuthError(err){
+    var m = (err && err.message ? err.message : ''+err).toLowerCase();
+    if(m.indexOf('invalid login')!==-1 || m.indexOf('invalid credentials')!==-1) return "That email or password isn't right. Please try again.";
+    if(m.indexOf('already registered')!==-1 || m.indexOf('already been registered')!==-1 || m.indexOf('user already')!==-1) return 'An account with this email already exists — try signing in instead.';
+    if(m.indexOf('email not confirmed')!==-1) return 'Please confirm your email first (check your inbox), then sign in.';
+    if(m.indexOf('weak password')!==-1 || (m.indexOf('password')!==-1 && m.indexOf('least')!==-1)) return 'Password must be at least 6 characters.';
+    if(m.indexOf('rate')!==-1 || m.indexOf('too many')!==-1) return 'Too many attempts — please wait a moment and try again.';
+    if(m.indexOf('failed to fetch')!==-1 || m.indexOf('networkerror')!==-1 || m.indexOf('load failed')!==-1) return "Can't reach the server. Please check your internet connection.";
+    return (err && err.message) ? err.message : 'Something went wrong. Please try again.';
+  }
+
+  if(Auth){
+    authSwitchBtn.addEventListener('click', function(){
+      authMode = (authMode==='signup') ? 'signin' : 'signup';
+      renderAuthMode();
+    });
+
+    authForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      var email=(authEmail.value||'').trim();
+      var pass=authPass.value||'';
+      if(!email || !pass){ showAuthMsg('err','Please enter your email and password.'); return; }
+      if(authMode==='signup' && pass.length<6){ showAuthMsg('err','Password must be at least 6 characters.'); return; }
+      authSubmit.disabled=true;
+      showAuthMsg('info', authMode==='signup' ? 'Creating your account…' : 'Signing you in…');
+      var action = (authMode==='signup') ? Auth.signUp(email,pass) : Auth.signIn(email,pass);
+      action.then(function(res){
+        authSubmit.disabled=false;
+        if(res.signedIn){ onSignedIn(); return; }
+        if(res.confirm){
+          authMode='signin'; renderAuthMode();
+          showAuthMsg('ok', 'Account created! Check your email ('+email+') for a confirmation link, then sign in.');
+        }
+      }).catch(function(err){
+        authSubmit.disabled=false;
+        showAuthMsg('err', friendlyAuthError(err));
+      });
+    });
+
+    // Social sign-in buttons (Google / Facebook) — being finalized.
+    Array.prototype.forEach.call(document.querySelectorAll('.social-btn'), function(btn){
+      btn.addEventListener('click', function(){
+        var prov = btn.getAttribute('data-prov');
+        var name = (prov==='google') ? 'Google' : (prov==='facebook') ? 'Facebook' : prov;
+        showAuthMsg('info', name + ' sign-in is being finalized — please continue with your email for now.');
+      });
+    });
+
+    if(authQuit) authQuit.addEventListener('click', function(){ invoke('hide_main'); });
+
+    var signOutBtn=$('signOutBtn');
+    if(signOutBtn) signOutBtn.addEventListener('click', function(){
+      signOutBtn.disabled=true;
+      Auth.signOut().then(function(){
+        signOutBtn.disabled=false;
+        authMode='signin'; renderAuthMode();
+        authEmail.value=''; authPass.value='';
+        showGate();
+      });
+    });
+
+    renderAuthMode();
+    if(Auth.isSignedIn()){ paintAccount(); hideGate(); } else { showGate(); }
+  }
+
+  /* ---------- restore saved settings on open ---------- */
+  try {
+    var savedStyle = localStorage.getItem('konx-style');
+    if(savedStyle) applyStyle(savedStyle, false);
+    var savedFloat = localStorage.getItem('konx-float');
+    floatToggle.setAttribute('aria-pressed', savedFloat==='0' ? 'false' : 'true');
+    applyTheme(localStorage.getItem('konx-theme')==='dark', false);
+  } catch(e){}
+  loadPersona();
+})();
+</script>
+</body>
+</html>

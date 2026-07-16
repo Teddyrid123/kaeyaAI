@@ -1,0 +1,27 @@
+# === Build output (huge, regenerated) ===
+# Rust / Tauri build artifacts
+**/target/
+konx-app/src-tauri/target/
+
+# Node
+**/node_modules/
+konx-app/node_modules/
+
+# === Secrets — NEVER commit (belt-and-suspenders; keys live outside the repo) ===
+keys.json
+**/keys.json
+*.env
+.env
+.env.*
+
+# === gstack local runtime state (ports, tokens, logs — not project code) ===
+.gstack/
+
+# === OS / editor junk ===
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/
