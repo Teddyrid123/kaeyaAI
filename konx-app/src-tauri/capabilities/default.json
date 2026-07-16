@@ -6,6 +6,9 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "opener:default"
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "opener:default",
+    "deep-link:default"
   ]
 }

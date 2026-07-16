@@ -127,11 +127,76 @@
     return done.then(function () { clearSession(); });
   }
 
-  // Build the provider consent URL (used later for Google/Facebook on desktop).
+  // Build the provider consent URL (used for Google/Facebook on desktop).
   function oauthUrl(provider, redirectTo) {
     var u = AUTH + "/authorize?provider=" + encodeURIComponent(provider);
     if (redirectTo) u += "&redirect_to=" + encodeURIComponent(redirectTo);
     return u;
+  }
+
+  // ---- social login (Google/Facebook) on desktop --------------------------
+  // Desktop apps have no web page to land on, so we use a custom URL scheme:
+  // we open the provider consent page in the system browser with
+  // redirect_to=kaeya://auth-callback. After the user approves, Supabase
+  // redirects the browser to that scheme; Windows hands the whole URL (with the
+  // login tokens in its #fragment) to the running app, which calls
+  // sessionFromRedirect() below. See lib.rs deep-link wiring + index.html.
+  var OAUTH_REDIRECT = "kaeya://auth-callback";
+
+  // Open a URL in the user's default browser (Tauri opener plugin; falls back
+  // to window.open outside Tauri, e.g. when previewing the page in a browser).
+  function openExternal(url) {
+    try {
+      if (window.__TAURI__ && window.__TAURI__.opener && window.__TAURI__.opener.openUrl) {
+        return window.__TAURI__.opener.openUrl(url);
+      }
+    } catch (e) {}
+    try { window.open(url, "_blank"); } catch (e) {}
+    return Promise.resolve();
+  }
+
+  // Kick off social sign-in: opens the browser to the provider's consent page.
+  // The rest completes when the kaeya:// redirect comes back (sessionFromRedirect).
+  function signInWithOAuth(provider, redirectTo) {
+    var url = oauthUrl(provider, redirectTo || OAUTH_REDIRECT);
+    return Promise.resolve(openExternal(url));
+  }
+
+  // Load the signed-in user's record (the implicit fragment carries only tokens).
+  function getUser(token) {
+    return fetch(AUTH + "/user", { headers: headers(token) }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json().then(function (j) { return j || null; }, function () { return null; });
+    }, function () { return null; });
+  }
+
+  // Complete social sign-in from the kaeya://auth-callback#... redirect URL.
+  // Parses the tokens out of the #fragment, loads the user, saves the session.
+  function sessionFromRedirect(url) {
+    var s = "" + (url || "");
+    var hashIdx = s.indexOf("#");
+    var frag = hashIdx >= 0 ? s.slice(hashIdx + 1) : "";
+    var p;
+    try { p = new URLSearchParams(frag); } catch (e) { p = new URLSearchParams(""); }
+    var errDesc = p.get("error_description") || p.get("error");
+    if (errDesc) return Promise.reject(new Error(errDesc));
+    var access = p.get("access_token");
+    if (!access) return Promise.reject(new Error("No sign-in came back. Please try again."));
+    var refreshTok = p.get("refresh_token") || "";
+    var expiresIn = parseInt(p.get("expires_in") || "3600", 10) || 3600;
+    var expiresAt = parseInt(p.get("expires_at") || "0", 10) ||
+                    (Math.floor(Date.now() / 1000) + expiresIn);
+    return getUser(access).then(function (user) {
+      var sess = normSession({
+        access_token: access,
+        refresh_token: refreshTok,
+        expires_at: expiresAt,
+        user: user
+      });
+      if (!sess) throw new Error("Sign in failed");
+      saveSession(sess);
+      return { signedIn: true, user: sess.user };
+    });
   }
 
   // ---- profile + avatar (PostgREST + Storage over REST) ----------------
@@ -241,6 +306,8 @@
     user: function () { var s = loadSession(); return s ? s.user : null; },
     onChange: function (cb) { if (typeof cb === "function") listeners.push(cb); },
     oauthUrl: oauthUrl,
+    signInWithOAuth: signInWithOAuth,
+    sessionFromRedirect: sessionFromRedirect,
     getProfile: getProfile,
     getPlan: getPlan,
     updateProfile: updateProfile,

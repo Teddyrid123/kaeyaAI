@@ -39,8 +39,24 @@ tells Kaeya what to do, and Kaeya **rewrites the text in place** (over the origi
   - **Sign-in / Sign-up screen built** (email/password WORKING; Google/Facebook buttons present
     but show "being finalized" — need provider setup). **Brain now calls the server proxy first**
     when signed in, local Rust key as fallback. See "Auth" + "The AI model-router" below.
+  - **Google OAuth — DONE & VERIFIED LIVE (2026-07-16).** Joseph signed in with Google
+    end-to-end (`josephtsmith31@gmail.com`): browser consent → `kaeya://auth-callback` deep
+    link → app signed in, gate dropped. Google Cloud OAuth client + Supabase Google provider +
+    `kaeya://` redirect allow-list all configured by Joseph. Known cosmetic quirk: the browser
+    tab that launched the `kaeya://` link keeps spinning (custom scheme isn't a web page) —
+    harmless, user just closes it. (A hosted "you can close this tab" bounce page would fix the
+    cosmetics later if wanted.)
+    Desktop redirect solved via a custom **`kaeya://`** deep link: `tauri-plugin-deep-link`
+    (+ `tauri-plugin-single-instance` w/ `deep-link` feature) registers the scheme at runtime
+    and, on the browser redirect, emits a `kaeya-oauth` event with the callback URL; the
+    frontend (`KaeyaAuth.signInWithOAuth` / `sessionFromRedirect`) parses the tokens out of the
+    URL `#fragment`, loads the user, and saves the session. **Continue with Google** button is
+    wired; Facebook still parked. Built clean. Joseph must still: create a Google OAuth Web
+    client (redirect `…supabase.co/auth/v1/callback`), enable Google in Supabase + paste
+    ID/secret, and add `kaeya://auth-callback` to the redirect allow-list — see
+    **`SOCIAL-LOGIN-SETUP.md`** (plain-language click-by-click).
   - Remaining: (a) Joseph to test signup→signin→server rewrite (feedback due ~2026-07-16);
-    (b) wire real Google/Facebook OAuth (provider apps + desktop redirect); (c) OpenAI credit /
+    (b) finish Google live test (above), then wire real Facebook OAuth (business/app review); (c) OpenAI credit /
     Gemini billing for GPT-4o + Pro models; (d) payments (Paystack/Flutterwave); (e) sync
     History/Saved/Personalize to the DB; (f) code-signing cert before distribution.
 
@@ -110,6 +126,13 @@ vero/
   - Gotcha: a Gemini model can be *listed* by ListModels yet still 404 "not available to
     new users" on generateContent (e.g. `gemini-2.5-flash`). Always test with a real
     generateContent call before trusting a model id. The `*-latest` aliases are safest.
+  - **Transient-overload fallback (2026-07-16):** `gemini-flash-latest` (the large tier) can
+    return **503 UNAVAILABLE "high demand"** even with a valid key — it hit Joseph on his first
+    signed-in "improve writing" test and dropped him to the demo brain. Both the server
+    (`functions/ai/index.ts`) and the local Rust path (`lib.rs ai_generate`) now **auto-retry
+    once on the provider's small model** (`gemini-flash-lite-latest`, which stays available)
+    when the requested model is transiently overloaded (503 / "high demand" / "overloaded" /
+    "unavailable" / "try again"). Keeps rewrites real instead of falling back to the mock.
 - `callProvider` now routes **server-first**: `callServer` POSTs to the Supabase `ai` proxy
   (`<SUPABASE_URL>/functions/v1/ai`) with the signed-in user's JWT when `window.KaeyaAuth`
   reports a session; it respects the server's `429` (daily limit) and `401` (login expired)

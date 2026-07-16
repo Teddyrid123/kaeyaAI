@@ -53,7 +53,8 @@
     if (p.goals) bits.push("their goal: " + p.goals);
     if (p.notes) bits.push("also note: " + p.notes);
     if (!bits.length) return "";
-    return "About the user (use this to guide the rewrite, but do not mention it in the output): " +
+    return "About the user (use this only to guide the rewrite; never greet them, never " +
+           "address them by name, and do not mention any of this in the output): " +
            bits.join("; ") + ". ";
   }
   function withPersona(instruction) {
@@ -249,6 +250,28 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
+  // Tidy a real-AI result: drop surrounding quotes and any leading greeting /
+  // preamble the model tacked on ("Welcome, Joseph.", "Here is the corrected
+  // version:", "Sure! ...") despite being told not to. Conservative: only removes
+  // a single leading greeting clause, and never returns empty.
+  function cleanOutput(t) {
+    if (!t) return t;
+    var out = ("" + t).trim();
+    // Strip matching wrapping quotes (straight or curly).
+    if (out.length > 1) {
+      var a = out.charAt(0), b = out.charAt(out.length - 1);
+      if ((a === '"' && b === '"') || (a === "“" && b === "”") ||
+          (a === "'" && b === "'")) {
+        out = out.slice(1, -1).trim();
+      }
+    }
+    // Remove one leading greeting/preamble clause, if present.
+    var greet = /^(hi|hello|hey|welcome|sure|certainly|of course|okay|ok|absolutely|here(?:'s| is| are)|here you go)\b[^.!?\n]*[.!?:]["”]?\s+/i;
+    var stripped = out.replace(greet, "").trim();
+    if (stripped.length) out = stripped;
+    return out;
+  }
+
   // Normalize text so we can tell when the model just handed back the same thing.
   function normalize(t) {
     return (t || "").toLowerCase().replace(/\s+/g, " ").replace(/[\s"'.,!?;:]+$/,"").trim();
@@ -264,6 +287,8 @@
     var base = withPersona(instruction);   // persona-enriched instruction sent to the model
 
     function finish(res) {
+      // Clean up chit-chat/quotes on real-AI output (the mock is already clean).
+      var text = (res.engine && res.engine !== "mock") ? cleanOutput(res.text) : res.text;
       return {
         provider: pick.provider,
         providerLabel: pick.providerLabel,
@@ -272,15 +297,17 @@
         modelLabel: pick.modelLabel,
         engine: res.engine,
         reason: res.reason || null,   // why we fell back to the demo brain, if we did
-        text: res.text
+        text: text
       };
     }
 
     // First pass at a moderate temperature.
     return callProvider(pick, text, base, 0.55).then(function (res) {
       // If a real model just gave the SAME text back (common when re-improving
-      // already-good text), push once more for a genuinely different version.
-      if (res.engine !== "mock" && sameText(res.text, text)) {
+      // already-good text), push once more for a genuinely different version —
+      // but ONLY for big/complex tasks. For a simple "fix grammar" on already-
+      // clean text, returning it unchanged is the correct answer, not a rewrite.
+      if (res.engine !== "mock" && pick.tier === "large" && sameText(res.text, text)) {
         var harder = base +
           " The text may already be polished — produce a NOTICEABLY different and further improved version. Do not return the original wording unchanged.";
         return callProvider(pick, text, harder, 0.95).then(function (res2) {

@@ -171,8 +171,9 @@
   .float-toggle[aria-pressed="true"] .switch{ background: linear-gradient(120deg,var(--violet),var(--cyan)); }
   .float-toggle[aria-pressed="true"] .switch b{ transform: translateX(16px); }
 
-  .top .x{ border:none; background:transparent; color:var(--ink-faint); width:34px; height:34px; border-radius:10px; font-size:22px; line-height:1; cursor:pointer;}
-  .top .x:hover{ background:var(--stroke); color:var(--ink); }
+  .top .x, .top .min{ border:none; background:transparent; color:var(--ink-faint); width:34px; height:34px; border-radius:10px; font-size:22px; line-height:1; cursor:pointer;}
+  .top .min{ display:inline-flex; align-items:center; justify-content:center; }
+  .top .x:hover, .top .min:hover{ background:var(--stroke); color:var(--ink); }
 
   .content{ flex:1; overflow-y:auto; display:flex; flex-direction:column; align-items:center;
     padding:clamp(14px,3vw,26px) clamp(20px,5vw,60px); }
@@ -194,7 +195,10 @@
 
   .capture{ margin:16px 0 4px; width:100%; max-width:620px; border:1px dashed var(--stroke-2); border-radius:var(--r-md);
     padding:12px 16px; background:var(--panel-2);}
-  .capture .lbl{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:5px;}
+  .capture .lbl{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:5px; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .clear-cap{ border:none; background:transparent; color:var(--ink-faint); font-family:var(--font); font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; padding:2px 6px; border-radius:6px; }
+  .clear-cap:hover{ color:var(--ink); background:var(--stroke); }
+  .clear-cap[hidden]{ display:none; }
   .capture .txt{ font-size:14px; color:var(--ink-soft); line-height:1.5; -webkit-user-select:text; user-select:text; }
   .capture .txt.empty{ font-style:italic; color:var(--ink-faint); }
 
@@ -527,7 +531,10 @@
         <button class="float-toggle" id="floatToggle" aria-pressed="true" title="Show the floating Kaeya ball on your screen edge">
           Float on edge <span class="switch"><b></b></span>
         </button>
-        <button class="x" id="closeBtn" aria-label="Close">&times;</button>
+        <button class="min" id="minBtn" aria-label="Minimize" title="Minimize">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+        </button>
+        <button class="x" id="closeBtn" aria-label="Close" title="Close">&times;</button>
       </div>
 
       <div class="content">
@@ -539,7 +546,7 @@
           <p class="sub">Select text anywhere on your screen, then tell Kaeya what to do &mdash; it rewrites it right where it sits.</p>
 
           <div class="capture">
-            <div class="lbl">Selected text</div>
+            <div class="lbl"><span>Selected text</span><button type="button" class="clear-cap" id="clearCapBtn" hidden>Clear</button></div>
             <div class="txt empty" id="capText">Highlight some text in any app, then tap the floating Kaeya ball.</div>
           </div>
 
@@ -981,6 +988,7 @@
 
   var $ = function(id){ return document.getElementById(id); };
   var app=$('app'), input=$('input'), result=$('result'), resultText=$('resultText'), capText=$('capText');
+  var clearCapBtn=$('clearCapBtn');
   var floatToggle=$('floatToggle'), deep=$('deep');
   var STYLES=['orb-kaeya','orb-aurora','orb-ocean','orb-blossom','orb-mint','orb-ember','orb-face'];
 
@@ -1012,9 +1020,12 @@
       capText.textContent = 'Highlight some text in any app, then tap the floating Kaeya ball.';
       capText.classList.add('empty');
     }
+    if(clearCapBtn) clearCapBtn.hidden = !captured;
     input.value = '';
     input.style.height = 'auto';
   }
+  // Clear button on the Selected-text box -> empty it and reset the panel.
+  if(clearCapBtn) clearCapBtn.addEventListener('click', function(){ setCaptured(''); });
   // When the orb captures text (single tap), it fires this event with the copied text.
   listen('konx-captured', function(e){
     setCaptured(e.payload);
@@ -1229,10 +1240,13 @@
     if(!captured || !text) return;
     invoke('apply_text', { text: text });   // Rust hides this window + pastes over the selection
     result.classList.remove('show');
+    setCaptured('');   // once inserted, clear the box so stale text isn't reused next open
   }
   $('applyBtn').addEventListener('click', function(){ if(!running) applyResult(); });
   $('redoBtn').addEventListener('click', function(){ result.classList.remove('show'); });
 
+  // Minimize (–) -> send the window to the taskbar; the orb stays on screen.
+  $('minBtn').addEventListener('click', function(){ invoke('minimize_main'); });
   // Close (x) or Escape -> hide the window (engine keeps running in the tray/orb).
   $('closeBtn').addEventListener('click', function(){ invoke('hide_main'); });
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') invoke('hide_main'); });
@@ -1688,14 +1702,39 @@
       });
     });
 
-    // Social sign-in buttons (Google / Facebook) — being finalized.
+    // Social sign-in buttons. Google is live (opens the browser, then the
+    // kaeya:// redirect finishes sign-in below). Facebook is still being finalized.
     Array.prototype.forEach.call(document.querySelectorAll('.social-btn'), function(btn){
       btn.addEventListener('click', function(){
         var prov = btn.getAttribute('data-prov');
         var name = (prov==='google') ? 'Google' : (prov==='facebook') ? 'Facebook' : prov;
+        if(prov==='google'){
+          showAuthMsg('info', 'Opening your browser to continue with Google…');
+          Auth.signInWithOAuth('google').catch(function(err){
+            showAuthMsg('err', friendlyAuthError(err));
+          });
+          return;
+        }
         showAuthMsg('info', name + ' sign-in is being finalized — please continue with your email for now.');
       });
     });
+
+    // Finish social sign-in: Rust emits 'kaeya-oauth' with the kaeya://auth-callback
+    // URL after the browser redirect. Parse it into a session and drop the gate.
+    try {
+      if(window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen){
+        window.__TAURI__.event.listen('kaeya-oauth', function(evt){
+          var url = evt && evt.payload;
+          if(!url) return;
+          showAuthMsg('info', 'Finishing sign-in…');
+          Auth.sessionFromRedirect(url).then(function(res){
+            if(res && res.signedIn) onSignedIn();
+          }).catch(function(err){
+            showAuthMsg('err', friendlyAuthError(err));
+          });
+        });
+      }
+    } catch(e){}
 
     if(authQuit) authQuit.addEventListener('click', function(){ invoke('hide_main'); });
 

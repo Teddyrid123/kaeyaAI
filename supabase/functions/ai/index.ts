@@ -15,9 +15,11 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { cors, json } from "../_shared/cors.ts";
 
 const SYSTEM_PROMPT =
-  "You are KonX, a friendly writing assistant. Rewrite the user's text exactly " +
-  "as their instruction asks. Reply with ONLY the rewritten text — no preamble, " +
-  "no explanation, no surrounding quotation marks.";
+  "You are Kaeya, a writing assistant. Apply the user's instruction to their text " +
+  "and reply with ONLY the resulting text — nothing else. Do NOT greet the user or " +
+  "address them by name. Do NOT add any preamble, introduction, explanation, notes, " +
+  "labels, or sign-off, and do NOT wrap the result in quotation marks. If the text " +
+  "is already correct for the instruction, return it unchanged.";
 
 // How many rewrites each plan gets per day. Tune freely.
 const DAILY_LIMIT: Record<string, number> = { free: 40, pro: 5000, team: 5000 };
@@ -27,6 +29,69 @@ const MODELS: Record<string, { small: string; large: string }> = {
   openai: { small: "gpt-4o-mini", large: "gpt-4o" },
   gemini: { small: "gemini-flash-lite-latest", large: "gemini-flash-latest" },
 };
+
+// A model can be momentarily overloaded (e.g. Gemini 503 "high demand") even
+// when the key is perfectly valid. Detect that so we can retry on the smaller,
+// more-available model instead of failing the whole request.
+function isTransient(status: number, message: string): boolean {
+  const m = (message || "").toLowerCase();
+  return status === 503 || m.includes("high demand") || m.includes("overloaded") ||
+    m.includes("unavailable") || m.includes("try again");
+}
+
+type ModelResult = { ok: true; out: string } | { ok: false; status: number; message: string };
+
+async function callGemini(key: string, model: string, userMsg: string, temperature: number): Promise<ModelResult> {
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ parts: [{ text: userMsg }] }],
+        generationConfig: { temperature },
+      }),
+    },
+  );
+  const v = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, status: r.status, message: v?.error?.message ?? "Gemini error" };
+  return { ok: true, out: (v?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim() };
+}
+
+async function callOpenAI(key: string, model: string, userMsg: string, temperature: number): Promise<ModelResult> {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model,
+      temperature,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMsg },
+      ],
+    }),
+  });
+  const v = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, status: r.status, message: v?.error?.message ?? "OpenAI error" };
+  return { ok: true, out: (v?.choices?.[0]?.message?.content ?? "").trim() };
+}
+
+// Run the requested model; if it comes back momentarily overloaded, retry once
+// on the provider's smaller model (far less likely to be capped). This keeps
+// signed-in rewrites working even when Google overloads the big Flash model.
+async function runWithFallback(
+  provider: string, model: string, key: string, userMsg: string, temperature: number,
+): Promise<ModelResult> {
+  const call = provider === "openai" ? callOpenAI : callGemini;
+  const small = MODELS[provider].small;
+  const res = await call(key, model, userMsg, temperature);
+  if (!res.ok && model !== small && isTransient(res.status, res.message)) {
+    const alt = await call(key, small, userMsg, temperature);
+    if (alt.ok) return alt;
+  }
+  return res;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -85,47 +150,13 @@ Deno.serve(async (req) => {
   let engine = "";
   let failure: { message: string; status: number } | null = null;
   try {
-    if (provider === "openai") {
-      const key = Deno.env.get("OPENAI_API_KEY");
-      if (!key) {
-        failure = { message: "OpenAI key not configured", status: 503 };
-      } else {
-        const r = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-          body: JSON.stringify({
-            model, temperature,
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: userMsg },
-            ],
-          }),
-        });
-        const v = await r.json();
-        if (!r.ok) failure = { message: v?.error?.message ?? "OpenAI error", status: 502 };
-        else { out = (v?.choices?.[0]?.message?.content ?? "").trim(); engine = "openai"; }
-      }
+    const key = provider === "openai" ? Deno.env.get("OPENAI_API_KEY") : Deno.env.get("GEMINI_API_KEY");
+    if (!key) {
+      failure = { message: `${provider === "openai" ? "OpenAI" : "Gemini"} key not configured`, status: 503 };
     } else {
-      const key = Deno.env.get("GEMINI_API_KEY");
-      if (!key) {
-        failure = { message: "Gemini key not configured", status: 503 };
-      } else {
-        const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-              contents: [{ parts: [{ text: userMsg }] }],
-              generationConfig: { temperature },
-            }),
-          },
-        );
-        const v = await r.json();
-        if (!r.ok) failure = { message: v?.error?.message ?? "Gemini error", status: 502 };
-        else { out = (v?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim(); engine = "gemini"; }
-      }
+      const res = await runWithFallback(provider, model, key, userMsg, temperature);
+      if (res.ok) { out = res.out; engine = provider; }
+      else failure = { message: res.message, status: 502 };
     }
   } catch (e) {
     failure = { message: String(e), status: 502 };

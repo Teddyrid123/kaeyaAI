@@ -111,6 +111,17 @@
   try { applyStyle(localStorage.getItem('konx-style') || 'orb-kaeya'); } catch(e){}
   listen('konx-style', function(e){ applyStyle(e.payload); });
 
+  // Window handle for dragging the orb around the screen.
+  var appWindow = window.__TAURI__.window.getCurrentWindow();
+  var PhysicalPosition = window.__TAURI__.window.PhysicalPosition;
+
+  // Restore the corner the user last dragged the orb to (Rust defaults it to
+  // bottom-right; this overrides once the window is ready).
+  try {
+    var savedCorner = localStorage.getItem('kaeya-orb-corner');
+    if(savedCorner) invoke('place_orb_corner', { corner: savedCorner });
+  } catch(e){}
+
   var orbEl = document.querySelector('.orb');
   var stateTimer = null;
   // The (hidden) main window drives quick mode and reports back here so the
@@ -126,10 +137,53 @@
     }
   });
 
-  // Single tap = open the window. Double tap = silent quick action (handled by main).
+  // Interaction: TAP = open, DOUBLE-TAP = quick action, DRAG = move to a corner.
   var bot = document.getElementById('bot');
   var tapTimer = null;
+  var drag = null;            // active drag state, or null
+  var suppressClick = false;  // true right after a drag, so it isn't also a "tap"
+  var DRAG_THRESH = 4;        // px of movement before it counts as a drag
+
+  bot.addEventListener('pointerdown', function(e){
+    if(e.button !== 0) return;
+    suppressClick = false;
+    drag = { sx:e.screenX, sy:e.screenY, wx:0, wy:0, ready:false, moved:false };
+    try { bot.setPointerCapture(e.pointerId); } catch(_){}
+    // Grab the window's current top-left so moves are relative to it.
+    appWindow.outerPosition().then(function(p){
+      if(drag){ drag.wx = p.x; drag.wy = p.y; drag.ready = true; }
+    }).catch(function(){ drag = null; });
+  });
+
+  bot.addEventListener('pointermove', function(e){
+    if(!drag || !drag.ready) return;
+    var dx = e.screenX - drag.sx, dy = e.screenY - drag.sy;
+    if(!drag.moved && (Math.abs(dx) + Math.abs(dy)) < DRAG_THRESH) return;
+    drag.moved = true;
+    var dpr = window.devicePixelRatio || 1;   // screen coords are logical; window pos is physical
+    appWindow.setPosition(new PhysicalPosition(
+      Math.round(drag.wx + dx * dpr),
+      Math.round(drag.wy + dy * dpr)
+    ));
+  });
+
+  function endDrag(e){
+    if(!drag) return;
+    var moved = drag.moved;
+    try { bot.releasePointerCapture(e.pointerId); } catch(_){}
+    drag = null;
+    if(moved){
+      suppressClick = true;   // the click that follows this pointerup is not a tap
+      invoke('snap_orb').then(function(corner){   // snap to nearest corner, remember it
+        try { localStorage.setItem('kaeya-orb-corner', corner); } catch(_){}
+      }).catch(function(){});
+    }
+  }
+  bot.addEventListener('pointerup', endDrag);
+  bot.addEventListener('pointercancel', endDrag);
+
   bot.addEventListener('click', function(){
+    if(suppressClick){ suppressClick = false; return; }   // this "click" ended a drag
     if(tapTimer){                    // this is the 2nd click -> double tap
       clearTimeout(tapTimer); tapTimer = null;
       emit('konx-quick');            // main captures + rewrites + replaces, no window

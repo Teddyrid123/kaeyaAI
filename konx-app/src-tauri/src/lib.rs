@@ -3,7 +3,8 @@
 
 use std::sync::{Arc, Mutex};
 use std::{thread, time::Duration};
-use tauri::{Manager, PhysicalPosition};
+use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 /// Remembers the last "real" foreground window (the app the user was typing in),
 /// so we know where to copy from and paste back to.
@@ -119,11 +120,123 @@ struct AiResult {
     engine: String,
 }
 
-const SYSTEM_PROMPT: &str = "You are KonX, a friendly writing assistant. Rewrite the user's text exactly as their instruction asks. Reply with ONLY the rewritten text — no preamble, no explanation, no surrounding quotation marks.";
+const SYSTEM_PROMPT: &str = "You are Kaeya, a writing assistant. Apply the user's instruction to their text and reply with ONLY the resulting text — nothing else. Do NOT greet the user or address them by name. Do NOT add any preamble, introduction, explanation, notes, labels, or sign-off, and do NOT wrap the result in quotation marks. If the text is already correct for the instruction, return it unchanged.";
+
+/// A failed model call: the HTTP status (0 = network error) + the message.
+struct CallErr {
+    status: u16,
+    message: String,
+}
+
+/// The smaller, more-available model for a provider — used as the retry target
+/// when the requested (usually large) model is momentarily overloaded.
+fn small_model(provider: &str) -> &'static str {
+    if provider == "openai" {
+        "gpt-4o-mini"
+    } else {
+        "gemini-flash-lite-latest"
+    }
+}
+
+/// A model can be briefly overloaded (e.g. Gemini 503 "high demand") even when
+/// the key is valid. Detect that so we can retry on the smaller model.
+fn is_transient(e: &CallErr) -> bool {
+    let m = e.message.to_lowercase();
+    e.status == 503
+        || m.contains("high demand")
+        || m.contains("overloaded")
+        || m.contains("unavailable")
+        || m.contains("try again")
+}
+
+async fn call_openai(
+    client: &reqwest::Client,
+    key: &str,
+    model: &str,
+    user: &str,
+    temp: f64,
+) -> Result<String, CallErr> {
+    let body = serde_json::json!({
+        "model": model,
+        "temperature": temp,
+        "messages": [
+            { "role": "system", "content": SYSTEM_PROMPT },
+            { "role": "user", "content": user }
+        ]
+    });
+    let resp = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| CallErr { status: 0, message: e.to_string() })?;
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    let v: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CallErr { status, message: e.to_string() })?;
+    if !ok {
+        return Err(CallErr {
+            status,
+            message: v["error"]["message"].as_str().unwrap_or("OpenAI request failed").to_string(),
+        });
+    }
+    let out = v["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_string();
+    if out.is_empty() {
+        return Err(CallErr { status, message: "OpenAI returned nothing".into() });
+    }
+    Ok(out)
+}
+
+async fn call_gemini(
+    client: &reqwest::Client,
+    key: &str,
+    model: &str,
+    user: &str,
+    temp: f64,
+) -> Result<String, CallErr> {
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        model
+    );
+    let body = serde_json::json!({
+        "systemInstruction": { "parts": [ { "text": SYSTEM_PROMPT } ] },
+        "contents": [ { "parts": [ { "text": user } ] } ],
+        "generationConfig": { "temperature": temp }
+    });
+    let resp = client
+        .post(&url)
+        .query(&[("key", key)])
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| CallErr { status: 0, message: e.to_string() })?;
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    let v: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CallErr { status, message: e.to_string() })?;
+    if !ok {
+        return Err(CallErr {
+            status,
+            message: v["error"]["message"].as_str().unwrap_or("Gemini request failed").to_string(),
+        });
+    }
+    let out = v["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or("").trim().to_string();
+    if out.is_empty() {
+        return Err(CallErr { status, message: "Gemini returned nothing".into() });
+    }
+    Ok(out)
+}
 
 /// Runs a real model. `provider` is "openai" or "gemini"; `model` is the exact
-/// model id chosen by the router. Returns an error (so the UI falls back to the
-/// built-in demo brain) when the key is missing or the request fails.
+/// model id chosen by the router. If that model is momentarily overloaded, we
+/// retry once on the provider's smaller model so the rewrite still succeeds.
+/// Returns an error (so the UI falls back to the built-in demo brain) only when
+/// the key is missing or both attempts fail.
 #[tauri::command]
 async fn ai_generate(
     provider: String,
@@ -137,72 +250,41 @@ async fn ai_generate(
     let user = format!("Instruction: {}\n\nText:\n{}", instruction.trim(), text);
     let client = reqwest::Client::new();
 
-    if provider == "openai" {
-        let key = keys.openai.trim().to_string();
-        if key.is_empty() {
-            return Err("NO_KEY".into());
-        }
-        let body = serde_json::json!({
-            "model": model,
-            "temperature": temp,
-            "messages": [
-                { "role": "system", "content": SYSTEM_PROMPT },
-                { "role": "user", "content": user }
-            ]
-        });
-        let resp = client
-            .post("https://api.openai.com/v1/chat/completions")
-            .bearer_auth(key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        let ok = resp.status().is_success();
-        let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-        if !ok {
-            return Err(v["error"]["message"].as_str().unwrap_or("OpenAI request failed").to_string());
-        }
-        let out = v["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_string();
-        if out.is_empty() {
-            return Err("OpenAI returned nothing".into());
-        }
-        return Ok(AiResult { text: out, engine: "openai".into() });
+    let key = match provider.as_str() {
+        "openai" => keys.openai.trim().to_string(),
+        "gemini" => keys.gemini.trim().to_string(),
+        other => return Err(format!("Unknown provider: {}", other)),
+    };
+    if key.is_empty() {
+        return Err("NO_KEY".into());
     }
 
-    if provider == "gemini" {
-        let key = keys.gemini.trim().to_string();
-        if key.is_empty() {
-            return Err("NO_KEY".into());
-        }
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
-            model
-        );
-        let body = serde_json::json!({
-            "systemInstruction": { "parts": [ { "text": SYSTEM_PROMPT } ] },
-            "contents": [ { "parts": [ { "text": user } ] } ],
-            "generationConfig": { "temperature": temp }
-        });
-        let resp = client
-            .post(&url)
-            .query(&[("key", key.as_str())])
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        let ok = resp.status().is_success();
-        let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-        if !ok {
-            return Err(v["error"]["message"].as_str().unwrap_or("Gemini request failed").to_string());
-        }
-        let out = v["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or("").trim().to_string();
-        if out.is_empty() {
-            return Err("Gemini returned nothing".into());
-        }
-        return Ok(AiResult { text: out, engine: "gemini".into() });
-    }
+    let is_openai = provider == "openai";
+    let first = if is_openai {
+        call_openai(&client, &key, &model, &user, temp).await
+    } else {
+        call_gemini(&client, &key, &model, &user, temp).await
+    };
 
-    Err(format!("Unknown provider: {}", provider))
+    let out = match first {
+        Ok(out) => out,
+        Err(e) => {
+            let small = small_model(&provider);
+            if model != small && is_transient(&e) {
+                let alt = if is_openai {
+                    call_openai(&client, &key, small, &user, temp).await
+                } else {
+                    call_gemini(&client, &key, small, &user, temp).await
+                };
+                // If the fallback also fails, surface the original error.
+                alt.map_err(|_| e.message)?
+            } else {
+                return Err(e.message);
+            }
+        }
+    };
+
+    Ok(AiResult { text: out, engine: provider })
 }
 
 // ---------- commands called from the UI ----------
@@ -282,6 +364,14 @@ fn hide_main(app: tauri::AppHandle) {
     }
 }
 
+/// Minimize the main window to the taskbar (the title-bar minimize button).
+#[tauri::command]
+fn minimize_main(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.minimize();
+    }
+}
+
 #[tauri::command]
 fn set_orb_visible(app: tauri::AppHandle, visible: bool) {
     if let Some(w) = app.get_webview_window("orb") {
@@ -293,12 +383,89 @@ fn set_orb_visible(app: tauri::AppHandle, visible: bool) {
     }
 }
 
+// ---------- floating orb: corner docking ----------
+// The orb always lives in one of the four screen corners (never mid-edge). The
+// user drags it with the mouse; on release we snap it to the nearest corner.
+
+/// The top-left (x, y) for the orb at a named corner of its current monitor,
+/// in physical pixels, with a small margin from the edges.
+fn orb_corner_xy(orb: &tauri::WebviewWindow, corner: &str) -> Option<(i32, i32)> {
+    let m = orb.current_monitor().ok().flatten()?;
+    let mp = m.position();
+    let ms = m.size();
+    let os = orb.outer_size().unwrap_or(PhysicalSize::new(120, 120));
+    let margin = 10i32;
+    let left = mp.x + margin;
+    let right = mp.x + ms.width as i32 - os.width as i32 - margin;
+    let top = mp.y + margin;
+    let bottom = mp.y + ms.height as i32 - os.height as i32 - margin;
+    Some(match corner {
+        "top-left" => (left, top),
+        "top-right" => (right, top),
+        "bottom-left" => (left, bottom),
+        _ => (right, bottom), // bottom-right is the default/fallback
+    })
+}
+
+fn set_orb_corner(orb: &tauri::WebviewWindow, corner: &str) {
+    if let Some((x, y)) = orb_corner_xy(orb, corner) {
+        let _ = orb.set_position(PhysicalPosition::new(x, y));
+    }
+}
+
+/// Which corner is the orb's current position closest to, on its monitor.
+fn nearest_orb_corner(orb: &tauri::WebviewWindow) -> String {
+    if let (Ok(pos), Some(m)) = (orb.outer_position(), orb.current_monitor().ok().flatten()) {
+        let os = orb.outer_size().unwrap_or(PhysicalSize::new(120, 120));
+        let mp = m.position();
+        let ms = m.size();
+        let cx = pos.x + os.width as i32 / 2;
+        let cy = pos.y + os.height as i32 / 2;
+        let mid_x = mp.x + ms.width as i32 / 2;
+        let mid_y = mp.y + ms.height as i32 / 2;
+        let v = if cy < mid_y { "top" } else { "bottom" };
+        let h = if cx < mid_x { "left" } else { "right" };
+        return format!("{}-{}", v, h);
+    }
+    "bottom-right".into()
+}
+
+/// Place the orb at a specific corner (used to restore the user's saved choice).
+#[tauri::command]
+fn place_orb_corner(app: tauri::AppHandle, corner: String) {
+    if let Some(orb) = app.get_webview_window("orb") {
+        set_orb_corner(&orb, &corner);
+    }
+}
+
+/// After a drag, snap the orb to the nearest corner and return which one, so the
+/// frontend can remember it for next launch.
+#[tauri::command]
+fn snap_orb(app: tauri::AppHandle) -> String {
+    if let Some(orb) = app.get_webview_window("orb") {
+        let corner = nearest_orb_corner(&orb);
+        set_orb_corner(&orb, &corner);
+        return corner;
+    }
+    "bottom-right".into()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let shared: Arc<Mutex<isize>> = Arc::new(Mutex::new(0));
     let shared_for_thread = shared.clone();
 
     tauri::Builder::default()
+        // single-instance MUST be registered first. Its `deep-link` feature
+        // forwards a `kaeya://` link opened while the app is already running to
+        // the deep-link plugin (so we don't spawn a second app / duplicate orb).
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Target(shared))
         .invoke_handler(tauri::generate_handler![
@@ -306,20 +473,40 @@ pub fn run() {
             quick_capture,
             apply_text,
             hide_main,
+            minimize_main,
             set_orb_visible,
+            place_orb_corner,
+            snap_orb,
             ai_generate
         ])
         .setup(move |app| {
-            // Dock the orb to the right edge, vertically centered.
-            if let Some(orb) = app.get_webview_window("orb") {
-                if let Ok(Some(monitor)) = orb.current_monitor() {
-                    let size = monitor.size();
-                    let ow = 120i32;
-                    let oh = 120i32;
-                    let x = size.width as i32 - ow - 6;
-                    let y = (size.height as i32 - oh) / 2;
-                    let _ = orb.set_position(PhysicalPosition::new(x, y));
+            // ---- Social login (Google/Facebook) plumbing ----
+            // Register the custom `kaeya://` URL scheme at runtime so Windows
+            // knows this exe can receive `kaeya://auth-callback#...` links. Needed
+            // because Joseph runs the debug exe directly (not an installed build);
+            // the installer handles this for distribution via tauri.conf.json.
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                let _ = app.deep_link().register("kaeya");
+            }
+            // When the browser hands back `kaeya://auth-callback#access_token=...`,
+            // bring the main window forward and pass the whole URL to the frontend,
+            // which parses the tokens and completes sign-in.
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                if let Some(url) = event.urls().first() {
+                    if let Some(w) = handle.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    let _ = handle.emit("kaeya-oauth", url.to_string());
                 }
+            });
+
+            // Dock the orb to a screen corner (default bottom-right). The frontend
+            // restores the user's last-chosen corner on load if they moved it.
+            if let Some(orb) = app.get_webview_window("orb") {
+                set_orb_corner(&orb, "bottom-right");
             }
 
             // Track the last external foreground window so we know where to
