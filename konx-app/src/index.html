@@ -138,7 +138,11 @@
   .rail button.active{ background:#fff; color:var(--accent-2); box-shadow:var(--shadow-soft); }
   .rail .look.active{ background:#fff; box-shadow:0 0 0 2px var(--accent-2), var(--shadow-soft); }
   .rail .spacer{ flex:1; }
-  .rail .me{ width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--pink),var(--violet)); }
+  .rail .me{ width:34px; height:34px; border-radius:50%; padding:0; cursor:pointer;
+    background:linear-gradient(135deg,var(--pink),var(--violet)); background-size:cover; background-position:center;
+    border:2px solid transparent; }
+  .rail .me:hover{ box-shadow:var(--shadow-soft); }
+  .rail .me.active{ border-color:#fff; box-shadow:var(--shadow-soft); }
 
   /* main column */
   .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
@@ -265,6 +269,18 @@
   .psaved{ text-align:center; color:var(--good); font-size:13px; font-weight:600; margin:14px 0 0; height:16px;
     opacity:0; transition:opacity .25s; }
   .psaved.show{ opacity:1; }
+
+  /* ================= Profile tab ================= */
+  #profileView{ width:100%; max-width:560px; }
+  .pf-photo{ display:flex; align-items:center; gap:16px; margin:22px 0 4px; }
+  .pf-avatar{ width:84px; height:84px; border-radius:50%; flex:none; display:grid; place-items:center;
+    font-size:30px; font-weight:700; color:#fff; background:linear-gradient(135deg,var(--pink),var(--violet));
+    background-size:cover; background-position:center; box-shadow:var(--shadow-soft); }
+  .pf-actions{ display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+  .pf-hint{ font-size:12px; color:var(--ink-faint); min-height:15px; }
+  .pf-plan{ font-family:var(--font); font-size:11.5px; font-weight:700; letter-spacing:.02em; padding:5px 12px;
+    border-radius:999px; background:var(--panel-2); color:var(--accent-2); border:1px solid var(--stroke); }
+  .pf-plan.pro{ background:linear-gradient(135deg,var(--pink),var(--violet)); color:#fff; border-color:transparent; }
 
   /* ================= Subscription tab ================= */
   #subscriptionView{ width:100%; max-width:660px; }
@@ -496,7 +512,7 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
       </button>
       <div class="spacer"></div>
-      <div class="me" title="You"></div>
+      <button class="me" id="profileBtn" title="Your profile" aria-label="Your profile"></button>
     </nav>
 
     <div class="main">
@@ -708,6 +724,57 @@
             <p>Rewrites you bookmarked, kept for whenever you need them.</p>
           </div>
           <div class="hlist" id="savedList"></div>
+        </div>
+
+        <div id="profileView" hidden>
+          <div class="appear-head">
+            <h2>Your profile</h2>
+            <p>Your photo, name, and account.</p>
+          </div>
+
+          <div class="pf-photo">
+            <div class="pf-avatar" id="pfAvatar">K</div>
+            <div class="pf-actions">
+              <button class="hbtn" id="pfChangeBtn" type="button">Change photo</button>
+              <button class="hbtn danger" id="pfRemoveBtn" type="button" hidden>Remove photo</button>
+              <div class="pf-hint" id="pfPhotoHint">JPG or PNG. Follows your account on any computer.</div>
+              <input type="file" id="pfFile" accept="image/*" hidden>
+            </div>
+          </div>
+
+          <div class="pform">
+            <div class="pfield">
+              <label for="pfName">Display name</label>
+              <input type="text" id="pfName" placeholder="What should we call you?" maxlength="60" autocomplete="off">
+            </div>
+          </div>
+          <button class="appear-done" id="pfNameSave">Save name</button>
+          <div class="psaved" id="pfSaved">Saved ✓</div>
+
+          <div class="setgroup">Account</div>
+          <div class="setlist">
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname" id="pfEmail">—</div>
+                <div class="setdesc">Your sign-in email</div>
+              </div>
+              <span class="pf-plan" id="pfPlan">Free</span>
+            </div>
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Personalize how Kaeya writes</div>
+                <div class="setdesc">Set your tone, role, and writing style.</div>
+              </div>
+              <button class="hbtn" id="pfPersonalize" type="button">Open</button>
+            </div>
+            <div class="setrow">
+              <div class="setinfo">
+                <div class="setname">Sign out</div>
+                <div class="setdesc">Sign out of Kaeya on this computer.</div>
+              </div>
+              <button class="hbtn danger" id="pfSignOut" type="button">Sign out</button>
+            </div>
+          </div>
         </div>
 
         <div id="settingsView" hidden>
@@ -1210,6 +1277,7 @@
   var lookBtn=$('lookBtn'), appearDone=$('appearDone'), picks=$('picks');
   var newChatBtn=$('newChatBtn'), personalizeBtn=$('personalizeBtn'), subscriptionBtn=$('subscriptionBtn');
   var historyBtn=$('historyBtn'), savedBtn=$('savedBtn'), settingsBtn=$('settingsBtn');
+  var profileBtn=$('profileBtn');
 
   // Each tab = a full-screen view in the content area + the rail button that opens it.
   var VIEWS = {
@@ -1219,11 +1287,13 @@
     subscription: { el: $('subscriptionView'), btn: subscriptionBtn },
     history:      { el: $('historyView'),      btn: historyBtn },
     saved:        { el: $('savedView'),        btn: savedBtn },
+    profile:      { el: $('profileView'),      btn: profileBtn },
     settings:     { el: $('settingsView'),     btn: settingsBtn }
   };
   function setView(v){
     if(v==='history') renderHistory();   // refresh the list each time it opens
     if(v==='saved')   renderSaved();
+    if(v==='profile') loadProfile();     // pull latest photo/name/plan when opened
     Object.keys(VIEWS).forEach(function(k){
       var item = VIEWS[k], on = (k===v);
       item.el.hidden = !on;
@@ -1235,6 +1305,7 @@
   }
   personalizeBtn.addEventListener('click', function(){ setView('personalize'); });
   subscriptionBtn.addEventListener('click', function(){ setView('subscription'); });
+  if(profileBtn) profileBtn.addEventListener('click', function(){ setView('profile'); });
   historyBtn.addEventListener('click', function(){ setView('history'); });
   savedBtn.addEventListener('click', function(){ setView('saved'); });
   settingsBtn.addEventListener('click', function(){ setView('settings'); });
@@ -1435,16 +1506,148 @@
     authPass.setAttribute('autocomplete', up ? 'new-password' : 'current-password');
     showAuthMsg('', '');
   }
+  /* ---------- profile: avatar, name, plan ---------- */
+  var AV_KEY='kaeya-avatar', NM_KEY='kaeya-dispname';
+  function initialFor(email){ return (email ? email.charAt(0) : 'K').toUpperCase(); }
+
+  // Paint the avatar (photo if we have one, else the coloured initial) in all
+  // three spots: the rail button, the Settings account row, and the Profile page.
+  function paintAvatar(url, initial){
+    var spots=[$('acctAvatar'), $('pfAvatar')];
+    var me=$('profileBtn');
+    if(url){
+      spots.forEach(function(el){ if(el){ el.textContent=''; el.style.backgroundImage='url("'+url+'")'; } });
+      if(me) me.style.backgroundImage='url("'+url+'")';
+    } else {
+      // Empty string (not 'none') so the CSS gradient shows through again.
+      spots.forEach(function(el){ if(el){ el.style.backgroundImage=''; el.textContent=initial||'K'; } });
+      if(me) me.style.backgroundImage='';
+    }
+    var rm=$('pfRemoveBtn'); if(rm) rm.hidden=!url;
+  }
+
   function paintAccount(){
     var u = Auth ? Auth.user() : null;
     var email = (u && u.email) ? u.email : '';
-    var el=$('acctEmail'), av=$('acctAvatar');
-    if(el) el.textContent = email || '—';
-    if(av) av.textContent = (email ? email.charAt(0) : 'K').toUpperCase();
+    var el=$('acctEmail'); if(el) el.textContent = email || '—';
+    var pe=$('pfEmail'); if(pe) pe.textContent = email || '—';
+    var initial = initialFor(email);
+    // Instant paint from the last-known values on this PC; loadProfile refreshes.
+    var cachedUrl='', cachedName='';
+    try { cachedUrl=localStorage.getItem(AV_KEY)||''; cachedName=localStorage.getItem(NM_KEY)||''; } catch(e){}
+    paintAvatar(cachedUrl, initial);
+    var nm=$('pfName'); if(nm && !nm.value) nm.value=cachedName;
   }
+
+  // Pull the latest photo, name, and plan from the server for the Profile page.
+  function loadProfile(){
+    if(!Auth || !Auth.isSignedIn()) return;
+    var u=Auth.user(), initial=initialFor(u && u.email);
+    if(Auth.getProfile) Auth.getProfile().then(function(p){
+      if(!p) return;
+      var url=p.avatar_url||'';
+      paintAvatar(url, initial);
+      try { if(url) localStorage.setItem(AV_KEY,url); else localStorage.removeItem(AV_KEY); } catch(e){}
+      var nm=$('pfName');
+      if(nm && p.preferred_name){ nm.value=p.preferred_name; try{ localStorage.setItem(NM_KEY,p.preferred_name); }catch(e){} }
+    });
+    if(Auth.getPlan) Auth.getPlan().then(function(plan){
+      var el=$('pfPlan'); if(!el) return;
+      var pro = (plan && plan!=='free');
+      el.textContent = pro ? (plan.charAt(0).toUpperCase()+plan.slice(1)) : 'Free';
+      el.classList.toggle('pro', !!pro);
+    });
+  }
+
+  // Shrink a chosen image to a centre-cropped ~256px JPEG so uploads stay small.
+  function resizeToBlob(file, cb){
+    var img=new Image(), rd=new FileReader();
+    rd.onload=function(){
+      img.onload=function(){
+        var S=256, c=document.createElement('canvas'); c.width=S; c.height=S;
+        var ctx=c.getContext('2d'),
+            side=Math.min(img.width,img.height),
+            sx=(img.width-side)/2, sy=(img.height-side)/2;
+        ctx.drawImage(img, sx,sy,side,side, 0,0,S,S);
+        c.toBlob(function(b){ cb(b); }, 'image/jpeg', 0.85);
+      };
+      img.onerror=function(){ cb(null); };
+      img.src=rd.result;
+    };
+    rd.onerror=function(){ cb(null); };
+    rd.readAsDataURL(file);
+  }
+
+  (function wireProfile(){
+    var changeBtn=$('pfChangeBtn'), removeBtn=$('pfRemoveBtn'), file=$('pfFile'),
+        hint=$('pfPhotoHint'), nameSave=$('pfNameSave'), nameEl=$('pfName'), saved=$('pfSaved'),
+        personBtn=$('pfPersonalize'), outBtn=$('pfSignOut');
+    if(!changeBtn) return;
+    function setHint(t){ if(hint) hint.textContent=t||''; }
+
+    changeBtn.addEventListener('click', function(){ file.click(); });
+
+    file.addEventListener('change', function(){
+      var f=file.files && file.files[0]; file.value='';
+      if(!f) return;
+      if(!Auth || !Auth.isSignedIn()){ setHint('Please sign in first.'); return; }
+      setHint('Preparing photo…');
+      resizeToBlob(f, function(blob){
+        if(!blob){ setHint("Sorry, couldn't read that image. Try another one."); return; }
+        setHint('Uploading…');
+        Auth.uploadAvatar(blob, 'image/jpeg').then(function(url){
+          return Auth.updateProfile({ avatar_url:url }).then(function(){ return url; });
+        }).then(function(url){
+          paintAvatar(url, initialFor(Auth.user() && Auth.user().email));
+          try{ localStorage.setItem(AV_KEY,url); }catch(e){}
+          setHint('Photo updated ✓');
+        }).catch(function(err){
+          setHint('Upload failed. ' + (err && err.message ? err.message : 'Please try again.'));
+        });
+      });
+    });
+
+    removeBtn.addEventListener('click', function(){
+      if(!Auth || !Auth.isSignedIn()) return;
+      setHint('Removing…');
+      Auth.deleteAvatar().then(function(){ return Auth.updateProfile({ avatar_url:null }); }).then(function(){
+        paintAvatar('', initialFor(Auth.user() && Auth.user().email));
+        try{ localStorage.removeItem(AV_KEY); }catch(e){}
+        setHint('Photo removed.');
+      }).catch(function(err){
+        setHint('Could not remove. ' + (err && err.message ? err.message : 'Please try again.'));
+      });
+    });
+
+    nameSave.addEventListener('click', function(){
+      var name=(nameEl.value||'').trim();
+      // Keep the AI persona name in sync so rewrites know who you are.
+      try {
+        var p=JSON.parse(localStorage.getItem('konx-persona')||'{}')||{};
+        p.name=name; localStorage.setItem('konx-persona', JSON.stringify(p));
+        if(window.KonxAI && KonxAI.setPersona) KonxAI.setPersona(p);
+      } catch(e){}
+      try{ localStorage.setItem(NM_KEY,name); }catch(e){}
+      var pn=$('pName'); if(pn) pn.value=name;   // mirror into the Personalize tab
+      function done(){ if(saved){ saved.classList.add('show'); setTimeout(function(){ saved.classList.remove('show'); },2200); } }
+      if(Auth && Auth.updateProfile){ Auth.updateProfile({ preferred_name:name }).then(done, done); } else { done(); }
+    });
+
+    if(personBtn) personBtn.addEventListener('click', function(){ setView('personalize'); });
+    if(outBtn) outBtn.addEventListener('click', function(){
+      outBtn.disabled=true;
+      Auth.signOut().then(function(){
+        outBtn.disabled=false;
+        try{ localStorage.removeItem(AV_KEY); localStorage.removeItem(NM_KEY); }catch(e){}
+        paintAvatar('', 'K');
+        authMode='signin'; renderAuthMode(); authEmail.value=''; authPass.value='';
+        showGate();
+      });
+    });
+  })();
   function showGate(){ if(authGate) authGate.hidden=false; }
   function hideGate(){ if(authGate) authGate.hidden=true; }
-  function onSignedIn(){ paintAccount(); hideGate(); setView('welcome'); }
+  function onSignedIn(){ paintAccount(); loadProfile(); hideGate(); setView('welcome'); }
 
   function friendlyAuthError(err){
     var m = (err && err.message ? err.message : ''+err).toLowerCase();
@@ -1508,7 +1711,7 @@
     });
 
     renderAuthMode();
-    if(Auth.isSignedIn()){ paintAccount(); hideGate(); } else { showGate(); }
+    if(Auth.isSignedIn()){ paintAccount(); loadProfile(); hideGate(); } else { showGate(); }
   }
 
   /* ---------- restore saved settings on open ---------- */

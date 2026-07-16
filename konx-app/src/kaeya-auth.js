@@ -134,6 +134,101 @@
     return u;
   }
 
+  // ---- profile + avatar (PostgREST + Storage over REST) ----------------
+
+  var REST = SUPABASE_URL + "/rest/v1";
+  var STORAGE = SUPABASE_URL + "/storage/v1";
+  var AVATAR_BUCKET = "avatars";
+
+  function uid() { var s = loadSession(); return (s && s.user) ? s.user.id : null; }
+
+  function restHeaders(token, extra) {
+    var h = { "apikey": ANON, "Authorization": "Bearer " + token };
+    if (extra) { for (var k in extra) { if (extra.hasOwnProperty(k)) h[k] = extra[k]; } }
+    return h;
+  }
+
+  // This user's profile row (avatar + preferred name). null if none / signed out.
+  function getProfile() {
+    var id = uid();
+    if (!id) return Promise.resolve(null);
+    return getAccessToken().then(function (token) {
+      if (!token) return null;
+      var url = REST + "/profiles?id=eq." + id + "&select=avatar_url,preferred_name";
+      return fetch(url, { headers: restHeaders(token) }).then(function (r) {
+        if (!r.ok) return null;
+        return r.json().then(function (rows) { return (rows && rows[0]) || null; }, function () { return null; });
+      }, function () { return null; });
+    });
+  }
+
+  // This user's effective plan from subscriptions (only 'active' counts as paid).
+  function getPlan() {
+    var id = uid();
+    if (!id) return Promise.resolve("free");
+    return getAccessToken().then(function (token) {
+      if (!token) return "free";
+      var url = REST + "/subscriptions?user_id=eq." + id + "&select=plan,status";
+      return fetch(url, { headers: restHeaders(token) }).then(function (r) {
+        if (!r.ok) return "free";
+        return r.json().then(function (rows) {
+          var s = rows && rows[0];
+          return (s && s.status === "active") ? (s.plan || "free") : "free";
+        }, function () { return "free"; });
+      }, function () { return "free"; });
+    });
+  }
+
+  // Update columns on this user's profile row, e.g. { avatar_url, preferred_name }.
+  function updateProfile(fields) {
+    var id = uid();
+    if (!id) return Promise.reject(new Error("Not signed in"));
+    return getAccessToken().then(function (token) {
+      if (!token) throw new Error("Not signed in");
+      return fetch(REST + "/profiles?id=eq." + id, {
+        method: "PATCH",
+        headers: restHeaders(token, { "Content-Type": "application/json", "Prefer": "return=minimal" }),
+        body: JSON.stringify(fields)
+      }).then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || ("Update failed (" + r.status + ")")); });
+        return true;
+      });
+    });
+  }
+
+  // Upload (or replace) this user's avatar. `blob` = image bytes. Resolves to the
+  // cache-busted public URL — the caller should save it via updateProfile too.
+  function uploadAvatar(blob, contentType) {
+    var id = uid();
+    if (!id) return Promise.reject(new Error("Not signed in"));
+    var path = id + "/avatar.jpg";
+    return getAccessToken().then(function (token) {
+      if (!token) throw new Error("Not signed in");
+      return fetch(STORAGE + "/object/" + AVATAR_BUCKET + "/" + path, {
+        method: "POST",
+        headers: restHeaders(token, { "Content-Type": contentType || "image/jpeg", "x-upsert": "true" }),
+        body: blob
+      }).then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || ("Upload failed (" + r.status + ")")); });
+        var pub = STORAGE + "/object/public/" + AVATAR_BUCKET + "/" + path;
+        return pub + "?v=" + Date.now();  // cache-bust so the new photo shows at once
+      });
+    });
+  }
+
+  // Remove this user's avatar file (caller also clears avatar_url on the profile).
+  function deleteAvatar() {
+    var id = uid();
+    if (!id) return Promise.resolve();
+    var path = id + "/avatar.jpg";
+    return getAccessToken().then(function (token) {
+      if (!token) return;
+      return fetch(STORAGE + "/object/" + AVATAR_BUCKET + "/" + path, {
+        method: "DELETE", headers: restHeaders(token)
+      }).then(function () {}, function () {});
+    });
+  }
+
   window.KaeyaAuth = {
     url: SUPABASE_URL,
     anon: ANON,
@@ -145,6 +240,11 @@
     isSignedIn: function () { return !!loadSession(); },
     user: function () { var s = loadSession(); return s ? s.user : null; },
     onChange: function (cb) { if (typeof cb === "function") listeners.push(cb); },
-    oauthUrl: oauthUrl
+    oauthUrl: oauthUrl,
+    getProfile: getProfile,
+    getPlan: getPlan,
+    updateProfile: updateProfile,
+    uploadAvatar: uploadAvatar,
+    deleteAvatar: deleteAvatar
   };
 })();
