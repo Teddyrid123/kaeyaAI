@@ -122,6 +122,10 @@ struct AiResult {
 
 const SYSTEM_PROMPT: &str = "You are Kaeya, a writing assistant. Apply the user's instruction to their text and reply with ONLY the resulting text — nothing else. Do NOT greet the user or address them by name. Do NOT add any preamble, introduction, explanation, notes, labels, or sign-off, and do NOT wrap the result in quotation marks. If the text is already correct for the instruction, return it unchanged.";
 
+// The on-screen helper (v1.0): the model is shown a photo of the user's screen
+// plus their question, and answers with simple, friendly, step-by-step guidance.
+const VISION_PROMPT: &str = "You are Kaeya, a warm, friendly helper for people who are NOT comfortable with computers. You are shown a photo of the user's screen and their question. Answer ONLY what they asked, based on what is really on their screen. Follow these rules strictly: keep it short and to the point; use everyday words, never technical jargon; when you give steps, write each step on its OWN line as a numbered list (1., 2., 3.), just one short sentence per step; tell them plainly where to look and what to click (for example: 'At the bottom, click the button that says Forward'); do NOT use asterisks, stars, markdown, bold symbols, hashes, or any special formatting characters; do NOT add a long introduction or a summary sentence at the end. If the answer is not visible on the screen, say so kindly in one short line, then give one or two simple tips.";
+
 /// A failed model call: the HTTP status (0 = network error) + the message.
 struct CallErr {
     status: u16,
@@ -138,14 +142,19 @@ fn small_model(provider: &str) -> &'static str {
     }
 }
 
-/// A model can be briefly overloaded (e.g. Gemini 503 "high demand") even when
-/// the key is valid. Detect that so we can retry on the smaller model.
+/// A model can be briefly overloaded (Gemini 503 "high demand") or rate-limited
+/// (429) even when the key is valid and has quota left — the big free model hits
+/// its limits long before the small one does. Detect that so we retry on the
+/// smaller, more-available model instead of dropping to the demo brain.
 fn is_transient(e: &CallErr) -> bool {
     let m = e.message.to_lowercase();
     e.status == 503
+        || e.status == 429
         || m.contains("high demand")
         || m.contains("overloaded")
         || m.contains("unavailable")
+        || m.contains("exhausted")
+        || m.contains("rate limit")
         || m.contains("try again")
 }
 
@@ -277,6 +286,201 @@ async fn ai_generate(
                     call_gemini(&client, &key, small, &user, temp).await
                 };
                 // If the fallback also fails, surface the original error.
+                alt.map_err(|_| e.message)?
+            } else {
+                return Err(e.message);
+            }
+        }
+    };
+
+    Ok(AiResult { text: out, engine: provider })
+}
+
+// ---------- on-screen helper: "look at my screen and guide me" ----------
+
+/// Take one photo of the primary screen, shrink very wide screens, and return it
+/// as base64 JPEG. JPEG (not PNG) keeps the upload small — important on the slow
+/// connections common in our markets — while staying legible for the model.
+fn capture_screen_jpeg() -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use std::io::Cursor;
+    use xcap::image::{imageops::FilterType, DynamicImage, ImageFormat};
+
+    let monitors = xcap::Monitor::all().map_err(|e| e.to_string())?;
+    let monitor = monitors
+        .into_iter()
+        .next()
+        .ok_or_else(|| "No screen was found to capture.".to_string())?;
+    let rgba = monitor.capture_image().map_err(|e| e.to_string())?;
+
+    let mut img = DynamicImage::ImageRgba8(rgba);
+    if img.width() > 1600 {
+        img = img.resize(1600, 1600, FilterType::Triangle);
+    }
+    // JPEG has no alpha channel, so flatten to RGB first.
+    let img = DynamicImage::ImageRgb8(img.to_rgb8());
+
+    let mut cursor = Cursor::new(Vec::new());
+    img.write_to(&mut cursor, ImageFormat::Jpeg)
+        .map_err(|e| e.to_string())?;
+    Ok(STANDARD.encode(cursor.into_inner()))
+}
+
+async fn call_gemini_vision(
+    client: &reqwest::Client,
+    key: &str,
+    model: &str,
+    prompt: &str,
+    image_b64: &str,
+    temp: f64,
+) -> Result<String, CallErr> {
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        model
+    );
+    let body = serde_json::json!({
+        "systemInstruction": { "parts": [ { "text": VISION_PROMPT } ] },
+        "contents": [ { "parts": [
+            { "text": prompt },
+            { "inline_data": { "mime_type": "image/jpeg", "data": image_b64 } }
+        ] } ],
+        "generationConfig": { "temperature": temp }
+    });
+    let resp = client
+        .post(&url)
+        .query(&[("key", key)])
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| CallErr { status: 0, message: e.to_string() })?;
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    let v: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CallErr { status, message: e.to_string() })?;
+    if !ok {
+        return Err(CallErr {
+            status,
+            message: v["error"]["message"].as_str().unwrap_or("Gemini request failed").to_string(),
+        });
+    }
+    let out = v["candidates"][0]["content"]["parts"][0]["text"].as_str().unwrap_or("").trim().to_string();
+    if out.is_empty() {
+        return Err(CallErr { status, message: "Gemini returned nothing".into() });
+    }
+    Ok(out)
+}
+
+async fn call_openai_vision(
+    client: &reqwest::Client,
+    key: &str,
+    model: &str,
+    prompt: &str,
+    image_b64: &str,
+    temp: f64,
+) -> Result<String, CallErr> {
+    let data_url = format!("data:image/jpeg;base64,{}", image_b64);
+    let body = serde_json::json!({
+        "model": model,
+        "temperature": temp,
+        "messages": [
+            { "role": "system", "content": VISION_PROMPT },
+            { "role": "user", "content": [
+                { "type": "text", "text": prompt },
+                { "type": "image_url", "image_url": { "url": data_url } }
+            ] }
+        ]
+    });
+    let resp = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| CallErr { status: 0, message: e.to_string() })?;
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    let v: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CallErr { status, message: e.to_string() })?;
+    if !ok {
+        return Err(CallErr {
+            status,
+            message: v["error"]["message"].as_str().unwrap_or("OpenAI request failed").to_string(),
+        });
+    }
+    let out = v["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_string();
+    if out.is_empty() {
+        return Err(CallErr { status, message: "OpenAI returned nothing".into() });
+    }
+    Ok(out)
+}
+
+/// Called by the "Explain my screen" flow. Takes one photo of the screen, sends
+/// it with the user's question to the vision model, and returns plain-language
+/// step-by-step guidance. Same transient-overload retry as `ai_generate`.
+#[tauri::command]
+async fn screen_help(
+    app: tauri::AppHandle,
+    question: String,
+    provider: String,
+    model: String,
+    temperature: Option<f64>,
+) -> Result<AiResult, String> {
+    let keys = load_keys();
+    let temp = temperature.unwrap_or(0.4);
+
+    let key = match provider.as_str() {
+        "openai" => keys.openai.trim().to_string(),
+        "gemini" => keys.gemini.trim().to_string(),
+        other => return Err(format!("Unknown provider: {}", other)),
+    };
+    if key.is_empty() {
+        return Err("NO_KEY".into());
+    }
+
+    // Hide our own window first so the photo shows the app BEHIND Kaeya (the one
+    // the user actually needs help with), not Kaeya itself. We restore it right
+    // after. Screen capture is blocking work, so run it (plus a short pause that
+    // lets Windows repaint what's underneath) off the async runtime's threads.
+    let main = app.get_webview_window("main");
+    if let Some(w) = &main {
+        let _ = w.hide();
+    }
+    let capture = tauri::async_runtime::spawn_blocking(|| {
+        thread::sleep(Duration::from_millis(200));
+        capture_screen_jpeg()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if let Some(w) = &main {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    let image_b64 = capture?;
+
+    let client = reqwest::Client::new();
+    let is_openai = provider == "openai";
+    let prompt = question.trim().to_string();
+
+    let first = if is_openai {
+        call_openai_vision(&client, &key, &model, &prompt, &image_b64, temp).await
+    } else {
+        call_gemini_vision(&client, &key, &model, &prompt, &image_b64, temp).await
+    };
+
+    let out = match first {
+        Ok(out) => out,
+        Err(e) => {
+            let small = small_model(&provider);
+            if model != small && is_transient(&e) {
+                let alt = if is_openai {
+                    call_openai_vision(&client, &key, small, &prompt, &image_b64, temp).await
+                } else {
+                    call_gemini_vision(&client, &key, small, &prompt, &image_b64, temp).await
+                };
                 alt.map_err(|_| e.message)?
             } else {
                 return Err(e.message);
@@ -477,7 +681,8 @@ pub fn run() {
             set_orb_visible,
             place_orb_corner,
             snap_orb,
-            ai_generate
+            ai_generate,
+            screen_help
         ])
         .setup(move |app| {
             // ---- Social login (Google/Facebook) plumbing ----

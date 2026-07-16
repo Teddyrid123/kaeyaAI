@@ -1,9 +1,11 @@
 # Kaeya Assistant — project guide for Claude
 
-Kaeya (**formerly "KonX"** — renamed 2026-07-15) is a **standalone desktop AI writing
-assistant for Windows**, aimed at Liberia and African emerging markets. Core idea: a small
+Kaeya (**formerly "KonX"** — renamed 2026-07-15) is a **standalone desktop AI assistant for
+Windows**, aimed at Liberia and African emerging markets. Two things it does: (1) a small
 **floating orb** sits on the screen edge; the user highlights text in *any* app, taps the orb,
-tells Kaeya what to do, and Kaeya **rewrites the text in place** (over the original selection).
+tells Kaeya what to do, and Kaeya **rewrites the text in place**; and (2) the **on-screen helper**
+— the user asks a question, Kaeya takes ONE photo of the screen and walks them through it in
+plain, simple steps. See "Product direction" below — the on-screen helper is the core wedge.
 
 > **Naming note:** the product is now **Kaeya** everywhere the user sees it. Many *internal*
 > names deliberately still say "konx"/"KonX" and MUST NOT be renamed casually (they'd break
@@ -19,6 +21,25 @@ tells Kaeya what to do, and Kaeya **rewrites the text in place** (over the origi
   and what to type. Confirm results in plain terms ("yes or no, did X happen?").
 - He is on **Windows 10**. The shell here is PowerShell (a Bash tool is also available).
 - Never ask him to paste secrets (API keys) into the chat.
+
+## Product direction (decided 2026-07-16 via /office-hours — READ THIS)
+Kaeya's differentiator is NOT "more AI" (can't out-model OpenAI/Google) and NOT primarily text
+rewriting. It is being **the patient on-screen helper for non-technical African users**: you ask,
+Kaeya looks at your screen ONCE and guides you through it in simple steps. Real evidence: Joseph
+watched a lady who couldn't find Gmail's Forward button and had to ask a human — the alternative
+to Kaeya in this market is "call someone every time." Competitor isn't Claude/Copilot; it's
+ignorance that AI does more than ChatGPT copy-paste.
+**Agreed build sequence (don't reorder without a reason):**
+1. **v1.0 — reactive screen helper — DONE & VERIFIED LIVE (2026-07-16).** Ask → screenshot →
+   vision model → plain numbered steps. Captured ONLY when asked (privacy + cheaper). See below.
+2. **v1.1 — proactive nudges:** same engine, Kaeya offers help first based on the front app.
+   Turn on only AFTER v1.0 is trusted (bad proactive guesses feel broken).
+3. **v1.2 — local documents:** Liberian quotation / invoice / sponsorship letter / MOU formats.
+   The money + the local moat big players won't build.
+4. **v2 — the "operator":** file-moving / running apps for the user. HIGH RISK (one wrong
+   unsupervised action kills trust). Earned later, supervised first. Deliberately parked LAST.
+Guiding test for any feature: "Can this help a non-technical office worker finish their task in
+fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI feature.
 
 ## Current status (keep this updated)
 - **Phase 0 — DONE.** PowerShell spike proved capture→transform→replace in place works
@@ -59,6 +80,18 @@ tells Kaeya what to do, and Kaeya **rewrites the text in place** (over the origi
     (b) finish Google live test (above), then wire real Facebook OAuth (business/app review); (c) OpenAI credit /
     Gemini billing for GPT-4o + Pro models; (d) payments (Paystack/Flutterwave); (e) sync
     History/Saved/Personalize to the DB; (f) code-signing cert before distribution.
+- **Features section redesign — DONE (2026-07-16).** The welcome view now lists the four features
+  as **tabs** (`.ftabs` in `index.html`): Text Assistance (default open), Contextual Guidance,
+  Desktop Organization (Soon), Voice Command (Soon). Clicking a tab swaps its panel. The
+  **"Selected text" box moved to the top** and shows only on the Text Assistance tab OR when text
+  is captured/pasted (JS `selectCat` / `updateCaptureVis`).
+- **v1.0 on-screen helper — DONE & VERIFIED LIVE (2026-07-16).** "Explain my screen" in the
+  Contextual Guidance tab is real: it takes one photo of the screen and returns simple, numbered,
+  plain-language guidance. Joseph tested it live on Gmail end-to-end. This is the core-wedge
+  feature (see Product direction). Details in "The on-screen helper" below.
+  Next steps for it: (a) server-side vision path (currently LOCAL key only — signed-in users with
+  no local key fall to the demo brain); (b) v1.1 proactive nudges; (c) capture the monitor the
+  target app is on (v1.0 grabs the primary monitor).
 
 ## Repo layout
 ```
@@ -105,10 +138,28 @@ vero/
   `apply_text` writes new text to the clipboard, hides `main`, refocuses the target app,
   sends Ctrl+V.
 - **Rust commands** (invoked from JS): `open_konx`, `apply_text`, `hide_main`,
-  `set_orb_visible`, `ai_generate`.
+  `set_orb_visible`, `ai_generate`, `screen_help`.
 - **Events**: orb→main `konx-captured` (payload = captured text); main→orb `konx-style`
   (payload = look id, keeps the orb's appearance in sync). Look/float settings persist
   in `localStorage`.
+
+## The on-screen helper (v1.0 — the core wedge, `screen_help` in `lib.rs`)
+- Flow: user types a question → clicks **"Explain my screen"** (Contextual Guidance tab,
+  `data-screen="1"`) → JS `runScreenHelp` calls `KonxAI.runVision` → Rust `screen_help`.
+- `screen_help` (Rust): **hides the `main` window first** (so the photo shows the app BEHIND
+  Kaeya, not Kaeya itself), waits ~200ms for repaint, captures the primary monitor via **`xcap`**,
+  shrinks wide screens + encodes **JPEG** (small uploads for slow connections; via the `image`
+  crate with the `jpeg` feature + `base64`), then sends photo + question to the vision model with
+  a friendly `VISION_PROMPT` (short, numbered, plain, NO markdown), restores the window, returns
+  `{ text, engine }`. Same transient-overload retry as `ai_generate` — now broadened so **429 (rate
+  limit) AND 503 (high demand) both fall back to the small model** (`gemini-flash-lite-latest`,
+  which is multimodal and stays available on the free tier when `gemini-flash-latest` is busy).
+- Frontend: `formatGuidance` (in `index.html`) renders the answer as a clean numbered list
+  (HTML-escaped; `**bold**`→`<strong>`, strips `* # \``, one step per line, styled step circles).
+  Guidance results get `.result.guidance` (hides Replace/Save — it's advice, not a rewrite).
+- **Local key only for now:** `screen_help` reads `%APPDATA%\KonX\keys.json`; there is no server
+  vision path yet, so a signed-in user with no local key falls to the demo brain. Wiring vision
+  into the Supabase `ai` function is the next step. New Rust deps: `xcap`, `image` (jpeg), `base64`.
 
 ## The AI model-router (`src/konx-ai.js` → `window.KonxAI`)
 - Classifies each request as **small** or **large** task: short text + simple instruction

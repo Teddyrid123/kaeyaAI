@@ -319,9 +319,58 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // 5) The on-screen helper (v1.0). Sends a photo of the user's screen +
+  //    their question to the vision model and returns friendly, step-by-step
+  //    guidance. The screenshot is taken natively by the Rust engine, so this
+  //    is the local path only for now (server-side vision comes next). If it
+  //    can't run (no key / not in the app), it falls back to a gentle message.
+  // ------------------------------------------------------------------
+  function runVision(question) {
+    var provider = config.activeProvider;
+    if (!PROVIDERS[provider]) provider = "gemini";
+    var m = PROVIDERS[provider].large;   // reading a screen is a big task
+    var invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+
+    function shape(res) {
+      return {
+        provider: provider,
+        providerLabel: PROVIDERS[provider].label,
+        tier: "large",
+        model: m.id,
+        modelLabel: m.label,
+        engine: res.engine,
+        reason: res.reason || null,
+        text: res.text
+      };
+    }
+    function fallback(reason) {
+      return shape({
+        engine: "mock",
+        reason: reason || "offline",
+        text: "I couldn't look at your screen just now. Tell me which app you're " +
+              "using and what you'd like to do, and I'll walk you through it step by step."
+      });
+    }
+
+    if (!invoke) return delay(200).then(function () { return fallback("preview"); });
+
+    return invoke("screen_help", {
+      question: withPersona(question),
+      provider: provider,
+      model: m.id,
+      temperature: 0.4
+    }).then(function (res) {
+      return shape({ text: res.text, engine: res.engine });
+    }).catch(function (err) {
+      return fallback(classifyError(err));
+    });
+  }
+
   window.KonxAI = {
     route: route,
     run: run,
+    runVision: runVision,
     config: config,
     providers: PROVIDERS,
     setProvider: function (name) { if (PROVIDERS[name]) config.activeProvider = name; },

@@ -202,7 +202,7 @@
   .capture .txt{ font-size:14px; color:var(--ink-soft); line-height:1.5; -webkit-user-select:text; user-select:text; }
   .capture .txt.empty{ font-style:italic; color:var(--ink-faint); }
 
-  .cards{ width:100%; max-width:620px; display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:18px 0 4px;}
+  .cards{ width:100%; max-width:620px; display:flex; flex-direction:column; gap:14px; margin:8px 0 4px; text-align:left;}
   .card{ display:flex; align-items:center; gap:12px; text-align:left; cursor:pointer;
     background:var(--panel-2); border:1px solid var(--stroke); border-radius:var(--r-md); padding:15px 16px;
     font-family:var(--font); font-weight:600; font-size:14px; color:var(--ink); transition:transform .12s, border-color .2s, background .2s;}
@@ -210,13 +210,67 @@
   .card .ic{ width:34px; height:34px; border-radius:10px; flex:none; display:grid; place-items:center; color:var(--accent-2);
     background:linear-gradient(135deg, rgba(155,140,255,0.18), rgba(126,224,230,0.18));}
   .card .plus{ margin-left:auto; color:var(--ink-faint); font-size:20px; line-height:1;}
+  .soon{ font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--accent-2); background:rgba(79,107,255,.12); padding:3px 8px; border-radius:999px; line-height:1.4; }
+  .card .soon, .fgroup-h .soon{ margin-left:auto; }
+  .is-soon{ opacity:.85; }
+  .is-soon:hover{ opacity:1; }
+  /* grouped feature list */
+  .fgroup{ border:1px solid var(--stroke); border-radius:var(--r-md); padding:12px 14px; }
+  .fgroup-h{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .fgroup-t{ font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--ink); }
+  .fsub{ margin:9px 0; }
+  .fsub-t{ display:block; font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:6px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:var(--font); font-size:13px; font-weight:600; color:var(--ink-soft); border:1px solid var(--stroke-2); background:var(--panel); border-radius:999px; padding:7px 13px; transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease, color .12s ease; }
+  .chip:hover{ transform:translateY(-1px); border-color:var(--accent-2); color:var(--ink); box-shadow:var(--shadow-soft); }
+  .chip:active{ transform:scale(.97); }
+  .chip.is-soon{ color:var(--ink-faint); }
+  .fnote{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:2px 0 0; }
+
+  /* feature category tabs (the four top-level features) */
+  .ftabs{ width:100%; max-width:620px; display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin:20px 0 4px; }
+  .ftab{ position:relative; display:flex; flex-direction:column; align-items:center; gap:9px; cursor:pointer; text-align:center;
+    font-family:var(--font); font-weight:600; font-size:12px; line-height:1.25; color:var(--ink-soft);
+    background:var(--panel); border:1px solid var(--stroke); border-radius:var(--r-md); padding:15px 8px 13px;
+    transition:transform .14s ease, border-color .18s ease, box-shadow .2s ease, color .18s ease, background .2s ease; }
+  .ftab:hover{ transform:translateY(-2px); border-color:var(--stroke-2); box-shadow:var(--shadow-soft); color:var(--ink); }
+  .ftab:active{ transform:translateY(0); }
+  .ftab .ic{ width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:var(--accent-2);
+    background:linear-gradient(135deg, rgba(155,140,255,0.18), rgba(126,224,230,0.18)); transition:background .2s ease, color .2s ease; }
+  .ftab .lb{ display:block; }
+  .ftab.active{ border-color:transparent; color:#fff;
+    background:linear-gradient(135deg, var(--accent-2), var(--violet));
+    box-shadow:0 16px 34px -14px rgba(79,107,255,0.6); }
+  .ftab.active:hover{ transform:translateY(-2px); }
+  .ftab.active .ic{ background:rgba(255,255,255,0.22); color:#fff; }
+  .ftab .soon{ position:absolute; top:8px; right:8px; margin:0; }
+  .ftab.active .soon{ background:rgba(255,255,255,0.24); color:#fff; }
+
+  /* one panel per feature category */
+  .fpanel{ width:100%; border:1px solid var(--stroke); border-radius:var(--r-md); padding:16px 16px 6px; background:var(--panel); }
+  .fpanel .fsub:first-child{ margin-top:2px; }
+  .fintro{ font-size:13px; color:var(--ink-soft); line-height:1.55; margin:0 0 13px; }
+  .fhint{ font-size:12px; color:var(--ink-faint); line-height:1.5; margin:12px 0 4px; }
+  /* the primary (filled) chip — used for the live "Explain my screen" action */
+  .chip-primary{ background:var(--accent); color:#fff; border-color:transparent; }
+  .chip-primary:hover{ background:var(--accent); color:#fff; border-color:transparent; filter:brightness(1.1); }
 
   .result{ width:100%; max-width:620px; margin:16px 0 4px; border-radius:var(--r-md); border:1px solid var(--stroke);
     background:linear-gradient(135deg, rgba(155,140,255,0.12), rgba(126,224,230,0.12)); padding:15px 17px; display:none;}
   .result.show{ display:block; animation:pop .35s ease; }
+  /* on-screen guidance is advice, not a rewrite — hide Replace + Save */
+  .result.guidance .apply, .result.guidance .save-toggle{ display:none; }
   @keyframes pop{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
   .result .lbl{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--good); margin-bottom:6px;}
   .result .txt{ font-size:15px; line-height:1.6; color:var(--ink); -webkit-user-select:text; user-select:text;}
+  /* clean step-by-step guidance layout (on-screen helper) */
+  .result .txt p{ margin:0 0 9px; }
+  .result .txt p:last-child{ margin-bottom:0; }
+  .result .txt ol.steps{ margin:4px 0 0; padding:0; list-style:none; counter-reset:step; display:flex; flex-direction:column; gap:10px; }
+  .result .txt ol.steps li{ position:relative; padding-left:34px; line-height:1.5; counter-increment:step; }
+  .result .txt ol.steps li::before{ content:counter(step); position:absolute; left:0; top:-1px; width:24px; height:24px;
+    display:grid; place-items:center; font-family:var(--font); font-weight:700; font-size:12.5px; color:#fff;
+    background:linear-gradient(135deg,var(--accent-2),var(--violet)); border-radius:50%; }
   .result .row{ display:flex; align-items:center; gap:10px; margin-top:13px; }
   .result .apply{ display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#fff;
     border:none; cursor:pointer; font-family:var(--font); font-weight:600; font-size:13.5px; padding:10px 16px; border-radius:11px;}
@@ -543,30 +597,87 @@
           <div class="reflection"></div>
 
           <h2 class="welcome">Welcome to <b>Kaeya</b></h2>
-          <p class="sub">Select text anywhere on your screen, then tell Kaeya what to do &mdash; it rewrites it right where it sits.</p>
+          <p class="sub">Highlight text anywhere and tap the floating ball &mdash; or paste text into Kaeya &mdash; then pick what you&rsquo;d like it to do.</p>
 
-          <div class="capture">
+          <!-- Selected text: sits at the top. Shows on the Text assistance tab, or once
+               you capture text (tap the ball / double-tap for quick mode) or paste it. -->
+          <div class="capture" id="capture" hidden>
             <div class="lbl"><span>Selected text</span><button type="button" class="clear-cap" id="clearCapBtn" hidden>Clear</button></div>
             <div class="txt empty" id="capText">Highlight some text in any app, then tap the floating Kaeya ball.</div>
           </div>
 
+          <!-- Feature categories, shown as tabs. Text assistance works now; the rest are on the way. -->
+          <div class="ftabs" id="ftabs" role="tablist" aria-label="Kaeya features">
+            <button class="ftab active" type="button" role="tab" aria-selected="true" data-cat="text">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/><path d="M12 4v16"/></svg></span>
+              <span class="lb">Text Assistance</span>
+            </button>
+            <button class="ftab" type="button" role="tab" aria-selected="false" data-cat="context">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg></span>
+              <span class="lb">Contextual Guidance</span>
+            </button>
+            <button class="ftab is-soon" type="button" role="tab" aria-selected="false" data-cat="desktop">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+              <span class="lb">Desktop Organization</span>
+              <span class="soon">Soon</span>
+            </button>
+            <button class="ftab is-soon" type="button" role="tab" aria-selected="false" data-cat="voice">
+              <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg></span>
+              <span class="lb">Voice Command</span>
+              <span class="soon">Soon</span>
+            </button>
+          </div>
+
+          <!-- One panel per category; the active tab decides which is shown. -->
           <div class="cards" id="cards">
-            <button class="card" data-p="Fix the grammar and spelling">
-              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
-              Fix grammar <span class="plus">+</span>
-            </button>
-            <button class="card" data-p="Make this shorter and punchier">
-              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9 3 12l3 3"/><path d="M18 9l3 3-3 3"/><path d="M9 5 15 19"/></svg></span>
-              Make it shorter <span class="plus">+</span>
-            </button>
-            <button class="card" data-p="Rewrite this in a formal tone">
-              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
-              Change the tone <span class="plus">+</span>
-            </button>
-            <button class="card" data-p="Improve the overall writing">
-              <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></span>
-              Improve writing <span class="plus">+</span>
-            </button>
+            <section class="fpanel" data-cat="text" role="tabpanel">
+              <div class="fsub">
+                <span class="fsub-t">Rewrite text</span>
+                <div class="chips">
+                  <button class="chip" data-p="Fix the grammar and spelling">Improve grammar</button>
+                  <button class="chip" data-p="Rewrite this to sound clear and professional">Make professional</button>
+                  <button class="chip" data-p="Make this more concise without losing the meaning">Make concise</button>
+                  <button class="chip" data-p="Rewrite this in a formal tone">Make formal</button>
+                  <button class="chip" data-p="Rewrite this in a warm, friendly tone">Make friendly</button>
+                </div>
+              </div>
+              <div class="fsub">
+                <span class="fsub-t">Summarize text</span>
+                <div class="chips">
+                  <button class="chip" data-p="Summarize this in one or two short sentences">Short summary</button>
+                  <button class="chip" data-p="Summarize this as a short list of bullet points">Bullet summary</button>
+                  <button class="chip" data-p="Write a brief executive summary of this">Executive summary</button>
+                </div>
+              </div>
+              <div class="fsub">
+                <span class="fsub-t">Translate text</span>
+                <div class="chips">
+                  <button class="chip" data-p="Translate this into French">English &rarr; French</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="fpanel" data-cat="context" role="tabpanel" hidden>
+              <p class="fintro">Stuck on something on your screen? Kaeya can take one look at your screen and walk you through it in simple steps &mdash; or explain any text you&rsquo;ve selected, in plain language.</p>
+              <div class="chips">
+                <button class="chip chip-primary" data-screen="1">Explain my screen</button>
+                <button class="chip" data-p="Explain this in simple, plain language a beginner can understand">Explain this text</button>
+                <button class="chip" data-p="Give clear step-by-step guidance for this, as simple numbered steps a beginner can follow">Step-by-step help</button>
+              </div>
+              <p class="fhint">Tip: type your question below first &mdash; like &ldquo;how do I forward this email?&rdquo; &mdash; then tap &ldquo;Explain my screen&rdquo;. Kaeya only looks when you ask.</p>
+            </section>
+
+            <section class="fpanel" data-cat="desktop" role="tabpanel" hidden>
+              <p class="fintro">Let Kaeya tidy your files and folders for you &mdash; automatically or on request.</p>
+              <div class="chips">
+                <button class="chip is-soon" data-soon="1" data-feature="Auto-sort into folders">Auto-sort into folders <span class="soon">Soon</span></button>
+                <button class="chip is-soon" data-soon="1" data-feature="Custom organization">&ldquo;Move all PDFs to Reports&rdquo; <span class="soon">Soon</span></button>
+              </div>
+            </section>
+
+            <section class="fpanel" data-cat="voice" role="tabpanel" hidden>
+              <p class="fintro">Speak instead of type &mdash; e.g. &ldquo;improve this text&rdquo;, &ldquo;summarize this&rdquo;, &ldquo;organize my desktop&rdquo;, or &ldquo;translate this to French&rdquo;.</p>
+            </section>
           </div>
 
           <div class="result" id="result">
@@ -988,7 +1099,7 @@
 
   var $ = function(id){ return document.getElementById(id); };
   var app=$('app'), input=$('input'), result=$('result'), resultText=$('resultText'), capText=$('capText');
-  var clearCapBtn=$('clearCapBtn');
+  var clearCapBtn=$('clearCapBtn'), captureBox=$('capture');
   var floatToggle=$('floatToggle'), deep=$('deep');
   var STYLES=['orb-kaeya','orb-aurora','orb-ocean','orb-blossom','orb-mint','orb-ember','orb-face'];
 
@@ -1021,11 +1132,53 @@
       capText.classList.add('empty');
     }
     if(clearCapBtn) clearCapBtn.hidden = !captured;
+    updateCaptureVis();   // box shows when there's text, or on the Text assistance tab
     input.value = '';
     input.style.height = 'auto';
   }
+
+  /* ---------- feature category tabs ---------- */
+  // The Selected-text box lives at the top. It appears when the user is on the
+  // Text assistance tab (they want to use it) OR when text has been captured/pasted.
+  var activeCat = 'text';
+  var ftabs = $('ftabs');
+  function updateCaptureVis(){
+    if(captureBox) captureBox.hidden = !(captured || activeCat === 'text');
+  }
+  function selectCat(cat){
+    activeCat = cat;
+    if(ftabs){
+      var tabs = ftabs.querySelectorAll('.ftab');
+      for(var i=0;i<tabs.length;i++){
+        var on = tabs[i].getAttribute('data-cat') === cat;
+        tabs[i].classList.toggle('active', on);
+        tabs[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+    }
+    var panels = document.querySelectorAll('.fpanel');
+    for(var j=0;j<panels.length;j++){
+      panels[j].hidden = panels[j].getAttribute('data-cat') !== cat;
+    }
+    updateCaptureVis();
+  }
+  if(ftabs){
+    ftabs.addEventListener('click', function(e){
+      var t = e.target.closest('.ftab'); if(!t) return;
+      selectCat(t.getAttribute('data-cat'));
+    });
+  }
+  selectCat('text');   // Text assistance is the default open category
   // Clear button on the Selected-text box -> empty it and reset the panel.
   if(clearCapBtn) clearCapBtn.addEventListener('click', function(){ setCaptured(''); });
+
+  // Paste text straight into the app (Ctrl+V anywhere except the command box) ->
+  // treat it as the selected text, so the box appears without needing the ball.
+  document.addEventListener('paste', function(e){
+    if(e.target === input) return;   // pasting into the command box is a normal edit
+    var cd = e.clipboardData || window.clipboardData;
+    var txt = cd ? cd.getData('text') : '';
+    if(txt && txt.trim()){ setCaptured(txt); e.preventDefault(); }
+  });
   // When the orb captures text (single tap), it fires this event with the copied text.
   listen('konx-captured', function(e){
     setCaptured(e.payload);
@@ -1191,6 +1344,8 @@
       return;
     }
     running = true;
+    result.classList.remove('guidance');
+    var rl0 = result.querySelector('.lbl'); if(rl0) rl0.textContent = 'Kaeya suggests';
     modelTag.hidden = true;
     resultText.textContent = 'Kaeya is thinking…';
     result.classList.add('show');
@@ -1222,9 +1377,76 @@
     });
   }
 
+  // Turn the model's guidance into clean, friendly HTML: each numbered step on
+  // its own line, real bold instead of ** symbols, no stray markdown. The text
+  // is HTML-escaped first, so only the tags we add ourselves are ever rendered.
+  function escHtml(s){
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function formatGuidance(raw){
+    var t = escHtml((raw || '').trim());
+    t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/[*#`]/g, '');
+    // Break inline numbered steps ("... 2. ...") onto their own lines.
+    t = t.replace(/\s+(\d+\.\s)/g, '\n$1');
+    var lines = t.split(/\n+/).map(function(s){ return s.trim(); }).filter(Boolean);
+    var html = '', inList = false;
+    lines.forEach(function(line){
+      var m = line.match(/^(\d+)\.\s+(.*)$/);
+      if(m){
+        if(!inList){ html += '<ol class="steps">'; inList = true; }
+        html += '<li>' + m[2] + '</li>';
+      } else {
+        if(inList){ html += '</ol>'; inList = false; }
+        html += '<p>' + line + '</p>';
+      }
+    });
+    if(inList) html += '</ol>';
+    return html || ('<p>' + t + '</p>');
+  }
+
+  // The on-screen helper: take one photo of the screen and guide the user.
+  function runScreenHelp(){
+    if(running) return;
+    running = true;
+    var q = input.value.trim() ||
+      'Look at my screen and tell me, in simple numbered steps, what I am looking at and how to use it.';
+    result.classList.add('guidance');
+    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya can help';
+    modelTag.hidden = true;
+    resultText.textContent = 'Kaeya is looking at your screen…';
+    result.classList.add('show');
+    result.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+    KonxAI.runVision(q).then(function(out){
+      resultText.innerHTML = formatGuidance(out.text);
+      modelTag.innerHTML =
+        '<span class="dot"></span> Handled by <b>' + out.modelLabel + '</b>' +
+        ' <span class="tier">screen help</span>' +
+        (out.engine === 'mock'
+          ? ' <span class="tier warn">demo brain</span>' + reasonNote(out.reason)
+          : ' <span class="tier">live</span>');
+      modelTag.hidden = false;
+      running = false;
+      lastEntry = null;   // guidance isn't a rewrite — nothing to save or replace
+    }).catch(function(){
+      resultText.textContent = 'Something went wrong looking at your screen. Please try again.';
+      running = false;
+    });
+  }
+
   $('cards').addEventListener('click', function(e){
-    var c = e.target.closest('.card'); if(!c) return;
-    input.value = c.getAttribute('data-p'); run(input.value);
+    var c = e.target.closest('.chip'); if(!c) return;
+    if(c.getAttribute('data-screen')){ runScreenHelp(); return; }
+    if(c.getAttribute('data-soon')){
+      var name = c.getAttribute('data-feature') || 'This feature';
+      modelTag.hidden = true;
+      resultText.textContent = name + ' is coming soon — we’re building it into Kaeya. For now, use the writing tools above or type a request below.';
+      result.classList.add('show');
+      result.scrollIntoView({behavior:'smooth', block:'nearest'});
+      return;
+    }
+    var p = c.getAttribute('data-p');
+    if(p){ input.value = p; run(p); }
   });
   $('sendBtn').addEventListener('click', function(){ if(input.value.trim()) run(input.value); });
   input.addEventListener('keydown', function(e){
@@ -1236,6 +1458,7 @@
 
   // Replace in document -> hand the new text to the engine, which pastes it back in place.
   function applyResult(){
+    if(result.classList.contains('guidance')) return;   // guidance is advice, not a rewrite
     var text = resultText.textContent;
     if(!captured || !text) return;
     invoke('apply_text', { text: text });   // Rust hides this window + pastes over the selection
@@ -1243,7 +1466,7 @@
     setCaptured('');   // once inserted, clear the box so stale text isn't reused next open
   }
   $('applyBtn').addEventListener('click', function(){ if(!running) applyResult(); });
-  $('redoBtn').addEventListener('click', function(){ result.classList.remove('show'); });
+  $('redoBtn').addEventListener('click', function(){ result.classList.remove('show','guidance'); });
 
   // Minimize (–) -> send the window to the taskbar; the orb stays on screen.
   $('minBtn').addEventListener('click', function(){ invoke('minimize_main'); });
