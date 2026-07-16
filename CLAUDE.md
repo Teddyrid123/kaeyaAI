@@ -163,6 +163,15 @@ vero/
 - The `ai` function requires a signed-in user (`verify_jwt`), meters per-plan daily usage
   (`DAILY_LIMIT` free:40 / pro,team:5000 in `functions/ai/index.ts`), and returns
   `{ text, engine, plan, used, limit }`. See `BACKEND.md` for the plain-language guide.
+- **Security hardening (2026-07-16, from `/cso` audit — migration `20260716120000_plan_hardening.sql`,
+  DEPLOYED):** the plan is now read from the **`subscriptions`** table (users cannot write it;
+  only the future service-role payment webhook sets it), NOT from the user-editable `profiles.plan`
+  — and `update (plan)` on `profiles` is revoked from `authenticated`/`anon`. This closed a hole
+  where a signed-in free user could `PATCH` their own `profiles.plan` to `pro` and spend the
+  server keys. Usage is now consumed atomically via `consume_quota` + `refund_usage` (reserve →
+  call → refund on failure), closing a check-then-increment race. **Payments must set
+  `subscriptions.plan`/`status='active'` via the service-role key server-side.** Report:
+  `.gstack/security-reports/2026-07-16-cso-keys.json` (local).
 
 ## Build & run
 - Prereqs already installed on this machine: Rust 1.97, Node 20, MSVC Build Tools 2022,
