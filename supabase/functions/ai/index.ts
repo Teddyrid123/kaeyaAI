@@ -28,8 +28,6 @@ const MODELS: Record<string, { small: string; large: string }> = {
   gemini: { small: "gemini-flash-lite-latest", large: "gemini-flash-latest" },
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method", message: "POST only" }, 405);
@@ -58,70 +56,88 @@ Deno.serve(async (req) => {
   const model = String(payload.model || MODELS[provider][tier]);
   if (!text.trim()) return json({ error: "empty", message: "No text to rewrite" }, 400);
 
-  // 3) Look up the user's plan + today's usage (service role bypasses RLS).
+  // 3) Determine the plan from `subscriptions` — a table users CANNOT write
+  //    (no update/insert RLS policy; only the service-role payment webhook sets
+  //    it). We never trust `profiles.plan` for limits: users can edit their own
+  //    profile row. A plan only counts while the subscription is active.
   const admin = createClient(url, service);
-  const { data: prof } = await admin.from("profiles").select("plan").eq("id", user.id).maybeSingle();
-  const plan = prof?.plan ?? "free";
+  const { data: sub } = await admin
+    .from("subscriptions").select("plan,status")
+    .eq("user_id", user.id).maybeSingle();
+  const plan = sub?.status === "active" ? (sub?.plan ?? "free") : "free";
   const limit = DAILY_LIMIT[plan] ?? DAILY_LIMIT.free;
 
-  const { data: usedRow } = await admin
-    .from("usage_daily").select("count")
-    .eq("user_id", user.id).eq("day", today()).maybeSingle();
-  const usedToday = usedRow?.count ?? 0;
-  if (usedToday >= limit) {
-    return json({ error: "limit", message: `Daily limit reached (${limit}). Upgrade for more.`, plan, used: usedToday, limit }, 429);
+  // Atomically RESERVE one unit up front. The returned count is the gate, so
+  // parallel calls each get a distinct number and cannot slip past the cap.
+  // We refund below if we exceed the limit or the model call fails.
+  const { data: reserved, error: quotaErr } = await admin.rpc("consume_quota", { p_user: user.id });
+  if (quotaErr) return json({ error: "quota", message: "Could not check usage" }, 500);
+  const used = (reserved as number) ?? 0;
+  if (used > limit) {
+    await admin.rpc("refund_usage", { p_user: user.id });
+    return json({ error: "limit", message: `Daily limit reached (${limit}). Upgrade for more.`, plan, used: limit, limit }, 429);
   }
 
-  // 4) Call the real model with the SERVER-side key.
+  // 4) Call the real model with the SERVER-side key. Collect any failure so the
+  //    reserved unit can be refunded once (only successes are counted).
   const userMsg = `Instruction: ${instruction.trim()}\n\nText:\n${text}`;
   let out = "";
   let engine = "";
+  let failure: { message: string; status: number } | null = null;
   try {
     if (provider === "openai") {
       const key = Deno.env.get("OPENAI_API_KEY");
-      if (!key) return json({ error: "no-key", message: "OpenAI key not configured" }, 503);
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model, temperature,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userMsg },
-          ],
-        }),
-      });
-      const v = await r.json();
-      if (!r.ok) return json({ error: "provider", message: v?.error?.message ?? "OpenAI error" }, 502);
-      out = (v?.choices?.[0]?.message?.content ?? "").trim();
-      engine = "openai";
+      if (!key) {
+        failure = { message: "OpenAI key not configured", status: 503 };
+      } else {
+        const r = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body: JSON.stringify({
+            model, temperature,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: userMsg },
+            ],
+          }),
+        });
+        const v = await r.json();
+        if (!r.ok) failure = { message: v?.error?.message ?? "OpenAI error", status: 502 };
+        else { out = (v?.choices?.[0]?.message?.content ?? "").trim(); engine = "openai"; }
+      }
     } else {
       const key = Deno.env.get("GEMINI_API_KEY");
-      if (!key) return json({ error: "no-key", message: "Gemini key not configured" }, 503);
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ parts: [{ text: userMsg }] }],
-            generationConfig: { temperature },
-          }),
-        },
-      );
-      const v = await r.json();
-      if (!r.ok) return json({ error: "provider", message: v?.error?.message ?? "Gemini error" }, 502);
-      out = (v?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-      engine = "gemini";
+      if (!key) {
+        failure = { message: "Gemini key not configured", status: 503 };
+      } else {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              contents: [{ parts: [{ text: userMsg }] }],
+              generationConfig: { temperature },
+            }),
+          },
+        );
+        const v = await r.json();
+        if (!r.ok) failure = { message: v?.error?.message ?? "Gemini error", status: 502 };
+        else { out = (v?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim(); engine = "gemini"; }
+      }
     }
   } catch (e) {
-    return json({ error: "provider", message: String(e) }, 502);
+    failure = { message: String(e), status: 502 };
   }
 
-  if (!out) return json({ error: "empty", message: "The AI returned nothing" }, 502);
+  if (!failure && !out) failure = { message: "The AI returned nothing", status: 502 };
 
-  // 5) Count this successful use, then return the rewrite.
-  await admin.rpc("increment_usage", { p_user: user.id });
-  return json({ text: out, engine, plan, used: usedToday + 1, limit });
+  // 5) Only a successful rewrite counts. Refund the reserved unit on any failure.
+  if (failure) {
+    await admin.rpc("refund_usage", { p_user: user.id });
+    return json({ error: "provider", message: failure.message }, failure.status);
+  }
+
+  return json({ text: out, engine, plan, used, limit });
 });
