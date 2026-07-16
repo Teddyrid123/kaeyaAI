@@ -207,3 +207,30 @@ vero/
 - The "improve" mock in `konx-ai.js` is a deliberate placeholder; real intelligence comes
   from the **server proxy** (signed in) or the Rust `ai_generate` (local fallback). Keep the
   mock working as the final offline/no-key fallback so the app never breaks.
+
+## Skill routing (gstack — Kaeya's AI team)
+Kaeya runs on the **gstack** workflow (Garry Tan's "thin harness, fat skills"). Treat these
+skills as the team. Match the ceremony to the size of the work: big / user-facing / risky →
+route it through the team; a trivial one-line fix → just do it. When a request matches a
+skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+
+- Product idea / new feature direction (payments, launch) → invoke **/office-hours**, then **/autoplan**
+- Strategy / scope decisions → invoke **/plan-ceo-review**
+- Architecture of a feature → invoke **/plan-eng-review**
+- Full review pipeline (CEO + eng + design + devex) → invoke **/autoplan**
+- Design system / plan review → invoke **/design-consultation** or **/plan-design-review**
+- Bugs / errors / "why is this broken" → invoke **/investigate**
+- Code review of a change/diff → invoke **/review**
+- Visual polish of the UI → invoke **/design-review**
+- Ship / deploy / open a PR → invoke **/ship** or **/land-and-deploy**
+- Security pass before distributing the .exe → invoke **/cso** (high value: key handling + extractable-key risk)
+- Save / resume working context → invoke **/context-save** / **/context-restore**
+
+**Kaeya-specific caveats:**
+- **Web browsing:** always use **/browse** (never `mcp__claude-in-chrome__*`).
+- Kaeya is a **Tauri desktop app**. `/browse`, `/qa`, and `/design-review` CAN open the plain
+  HTML frontend (`konx-app/src/index.html`, `orb.html`) via `file://` to test/critique the
+  sign-in gate, popup layout, and dark mode. But the **native capture→rewrite flow drives the
+  real keyboard/clipboard**, so that end-to-end test must be run by Joseph on his machine.
+- Repo is now on GitHub: `https://github.com/Teddyrid123/kaeyaAI.git` (branch `main`). This
+  unlocks `/review`, `/ship`, and the parallel-PR loop.
