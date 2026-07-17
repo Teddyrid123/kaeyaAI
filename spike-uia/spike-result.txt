@@ -1,0 +1,60 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260717162446
+Username: DESKTOP-5U9464I\LLC-3
+RunAs User: DESKTOP-5U9464I\LLC-3
+Configuration Name: 
+Machine: DESKTOP-5U9464I (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -Command if((Get-ExecutionPolicy ) -ne 'AllSigned') { Set-ExecutionPolicy -Scope Process Bypass }; & 'C:\Users\LLC-3\Desktop\Web Project\vero\spike-uia\spike-uia.ps1'
+Process ID: 25516
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+==== Kaeya UIAutomation spike - looking for: 'Forward' ====
+Click the app you want to test NOW. Reading the front window in...
+  5...
+  4...
+  3...
+  2...
+  1...
+
+Reading window: 'Document1 - Microsoft Word (Product Activation Failed)'
+
+Scanned 177 elements. 163 had a name Windows could read.
+
+==== MATCHES for 'Forward' ====
+  No element named like 'Forward' was found in this window.
+
+==== A few things Windows COULD see here (proves the tree is exposed) ====
+  - 'Line up'  [Button]  at X=1903 Y=161 size 17x17
+  - 'Page down'  [Button]  at X=1903 Y=784 size 17x166
+  - 'Line down'  [Button]  at X=1903 Y=950 size 17x17
+  - 'Minimize'  [Button]  at X=1772 Y=0 size 1x22
+  - 'Restore Down'  [Button]  at X=1773 Y=0 size 1x22
+  - 'Close'  [Button]  at X=1774 Y=0 size 146x22
+  - 'File Tab'  [Button]  at X=0 Y=24 size 59x24
+  - 'Minimize the Ribbon'  [Button]  at X=1876 Y=25 size 22x22
+  - 'Microsoft Word Help'  [Button]  at X=1898 Y=25 size 22x22
+  - 'Page Number 1 of 1'  [Button]  at X=0 Y=1018 size 76x22
+  - 'Word Count 76'  [Button]  at X=79 Y=1018 size 68x22
+  - 'Spelling and Grammar Check Checking'  [Button]  at X=150 Y=1018 size 32x22
+  - 'Print Layout'  [Button]  at X=1647 Y=1018 size 19x21
+  - 'Full Screen Reading'  [Button]  at X=1666 Y=1018 size 18x21
+  - 'Web Layout'  [Button]  at X=1684 Y=1018 size 18x21
+
+==== VERDICT ====
+  PARTLY - This window exposes its buttons to Windows, but 'Forward' wasn't among them.
+           Try the button's exact label, e.g.  .\spike-uia.ps1 "Reply"  - or scroll it into view first.
+
+Run again on another app (open it first):  .\spike-uia.ps1 Forward
+**********************
+Windows PowerShell transcript end
+End time: 20260717162454
+**********************

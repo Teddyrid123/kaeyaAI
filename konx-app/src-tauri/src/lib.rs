@@ -10,6 +10,16 @@ use tauri_plugin_deep_link::DeepLinkExt;
 /// so we know where to copy from and paste back to.
 struct Target(Arc<Mutex<isize>>);
 
+// On-screen pointing: read the real UI elements of the user's app (Windows only).
+#[cfg(windows)]
+mod uia;
+
+/// The most recent "point at this" request. The see-through overlay pulls this
+/// once its webview has finished loading — which, the FIRST time we point, only
+/// happens AFTER we've already emitted the live event (so a one-shot emit would
+/// be missed). Storing it here makes the first point reliable.
+struct PendingPoint(Arc<Mutex<Option<serde_json::Value>>>);
+
 // ---------- Windows-only OS integration ----------
 #[cfg(windows)]
 mod win {
@@ -491,6 +501,97 @@ async fn screen_help(
     Ok(AiResult { text: out, engine: provider })
 }
 
+/// Read the real on-screen buttons/links/fields of the app the user was last in
+/// (the tracked external foreground window), with their exact rectangles. This is
+/// the first half of on-screen pointing: FIND the element. Windows only.
+#[cfg(windows)]
+#[tauri::command]
+async fn list_elements(
+    state: tauri::State<'_, Target>,
+) -> Result<Vec<uia::UiaEl>, String> {
+    let hwnd = *state.0.lock().unwrap();
+    tauri::async_runtime::spawn_blocking(move || uia::list_elements_for(hwnd))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+async fn list_elements() -> Result<Vec<serde_json::Value>, String> {
+    Err("Reading on-screen elements is only available on Windows.".into())
+}
+
+/// Point at a named element (e.g. "Forward") in the user's last app: find it via
+/// UIAutomation, pick the best match, then show the see-through overlay and draw
+/// an arrow on its exact spot. Returns the element chosen (or None if not found).
+#[cfg(windows)]
+#[tauri::command]
+async fn point_at(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Target>,
+    pending: tauri::State<'_, PendingPoint>,
+    name: String,
+) -> Result<Option<uia::UiaEl>, String> {
+    let hwnd = *state.0.lock().unwrap();
+    let els = tauri::async_runtime::spawn_blocking(move || uia::list_elements_for(hwnd))
+        .await
+        .map_err(|e| e.to_string())??;
+    let target = uia::pick_target(&els, &name);
+
+    if let Some(t) = target.clone() {
+        let overlay = app
+            .get_webview_window("overlay")
+            .ok_or_else(|| "overlay window missing".to_string())?;
+        let mon = overlay
+            .primary_monitor()
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "no monitor found".to_string())?;
+        let pos = *mon.position();
+        let size = *mon.size();
+        let payload = serde_json::json!({
+            "x": t.x, "y": t.y, "w": t.w, "h": t.h,
+            "originX": pos.x, "originY": pos.y,
+            "monW": size.width, "monH": size.height,
+            "name": t.name, "seconds": 8
+        });
+        // Store BEFORE showing so the overlay can pull it once its webview loads
+        // (covers the first-point race), then also emit for the already-loaded case.
+        *pending.0.lock().unwrap() = Some(payload.clone());
+        overlay
+            .set_position(PhysicalPosition::new(pos.x, pos.y))
+            .map_err(|e| e.to_string())?;
+        overlay
+            .set_size(PhysicalSize::new(size.width, size.height))
+            .map_err(|e| e.to_string())?;
+        overlay.show().map_err(|e| e.to_string())?;
+        let _ = overlay.set_always_on_top(true);
+        overlay.emit("kaeya-point", payload).map_err(|e| e.to_string())?;
+    }
+    Ok(target)
+}
+
+/// The overlay calls this once its webview has loaded, to fetch (and clear) any
+/// point requested before it was ready. Returns None if there's nothing pending.
+#[tauri::command]
+fn take_pending_point(pending: tauri::State<'_, PendingPoint>) -> Option<serde_json::Value> {
+    pending.0.lock().unwrap().take()
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+async fn point_at(_name: String) -> Result<Option<serde_json::Value>, String> {
+    Err("Pointing is only available on Windows.".into())
+}
+
+/// Hide the see-through pointer overlay (called by the overlay itself after its
+/// arrow times out, or when we move to the next step).
+#[tauri::command]
+fn clear_point(app: tauri::AppHandle) {
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        let _ = overlay.hide();
+    }
+}
+
 // ---------- commands called from the UI ----------
 
 /// Called when the user taps the floating orb. Grabs the selected text from the
@@ -672,6 +773,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Target(shared))
+        .manage(PendingPoint(Arc::new(Mutex::new(None))))
         .invoke_handler(tauri::generate_handler![
             open_konx,
             quick_capture,
@@ -682,7 +784,11 @@ pub fn run() {
             place_orb_corner,
             snap_orb,
             ai_generate,
-            screen_help
+            screen_help,
+            list_elements,
+            point_at,
+            clear_point,
+            take_pending_point
         ])
         .setup(move |app| {
             // ---- Social login (Google/Facebook) plumbing ----
@@ -714,12 +820,20 @@ pub fn run() {
                 set_orb_corner(&orb, "bottom-right");
             }
 
+            // The see-through pointer overlay must never intercept clicks - the user
+            // has to keep using their real app underneath. Make it click-through and
+            // keep it hidden until we point at something.
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let _ = overlay.set_ignore_cursor_events(true);
+                let _ = overlay.hide();
+            }
+
             // Track the last external foreground window so we know where to
             // copy from / paste to when the orb is tapped.
             #[cfg(windows)]
             {
                 let mut ours: Vec<isize> = Vec::new();
-                for label in ["main", "orb"] {
+                for label in ["main", "orb", "overlay"] {
                     if let Some(w) = app.get_webview_window(label) {
                         if let Ok(h) = w.hwnd() {
                             ours.push(h.0 as isize);

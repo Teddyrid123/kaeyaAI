@@ -1,0 +1,39 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260717164053
+Username: DESKTOP-5U9464I\LLC-3
+RunAs User: DESKTOP-5U9464I\LLC-3
+Configuration Name: 
+Machine: DESKTOP-5U9464I (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -Command if((Get-ExecutionPolicy ) -ne 'AllSigned') { Set-ExecutionPolicy -Scope Process Bypass }; & 'C:\Users\LLC-3\Desktop\Web Project\vero\spike-uia\spike-uia-arrow.ps1'
+Process ID: 30016
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+==== Kaeya LIVE ARROW spike - looking for: 'Forward' ====
+Click the app you want to test NOW...
+  5...
+  4...
+  3...
+  2...
+  1...
+Reading window: 'Fwd: Fw: Purchase Order - j.smith@empowermentsquared.org - Global Citizens Care for Underprivileged and Refugee Empowerment Mail - Google Chrome'
+
+POINTING AT: 'Forward'  [Hyperlink]  at X=629 Y=973 size 113x36
+(chose 1 of 3 matches - skipped the browser's own toolbar arrow)
+
+Drawing the arrow now (clears in 8 seconds). Look at your app!
+
+==== VERDICT ====
+  If you saw a green box + red arrow on the real button: build-piece #2 WORKS.
+  Kaeya can now FIND the button (spike 1) AND POINT at it live (this spike).
+**********************
+Windows PowerShell transcript end
+End time: 20260717164107
+**********************

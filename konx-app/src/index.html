@@ -663,6 +663,8 @@
                 <button class="chip chip-primary" data-screen="1">Explain my screen</button>
                 <button class="chip" data-p="Explain this in simple, plain language a beginner can understand">Explain this text</button>
                 <button class="chip" data-p="Give clear step-by-step guidance for this, as simple numbered steps a beginner can follow">Step-by-step help</button>
+                <button class="chip" data-testuia="1" title="Dev test: read the buttons on your last app">Test: read buttons</button>
+                <button class="chip" data-pointtest="Forward" title="Dev test: point an arrow at the Forward button">Test: point at Forward</button>
               </div>
               <p class="fhint">Tip: type your question below first &mdash; like &ldquo;how do I forward this email?&rdquo; &mdash; then tap &ldquo;Explain my screen&rdquo;. Kaeya only looks when you ask.</p>
             </section>
@@ -1404,6 +1406,56 @@
     return html || ('<p>' + t + '</p>');
   }
 
+  // DEV TEST (temporary): prove Kaeya can read the real buttons of your last app
+  // via Windows UIAutomation. Shows the count + first few elements it found.
+  function runReadButtonsTest(){
+    var invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    result.classList.add('guidance');
+    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya (test)';
+    modelTag.hidden = true;
+    result.classList.add('show');
+    if(!invoke){ resultText.textContent = 'Run this inside the Kaeya app to test.'; return; }
+    resultText.textContent = 'Reading the buttons on your last app…';
+    invoke('list_elements').then(function(els){
+      var n = els.length;
+      var first = els.slice(0, 12).map(function(e){
+        return e.name + ' [' + e.ctype + '] @ ' + e.x + ',' + e.y + ' (' + e.w + 'x' + e.h + ')';
+      });
+      var esc = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+      resultText.innerHTML =
+        '<p><strong>Kaeya read ' + n + ' on-screen elements.</strong></p>' +
+        '<p>First few:</p><ul>' +
+        first.map(function(s){ return '<li>' + esc(s) + '</li>'; }).join('') +
+        '</ul>';
+    }).catch(function(err){
+      resultText.textContent = 'Could not read the screen: ' + err;
+    });
+  }
+
+  // DEV TEST (temporary): point a live arrow at a named button (e.g. "Forward")
+  // on the user's last app, via UIAutomation + the see-through overlay.
+  function runPointTest(name){
+    var invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    result.classList.add('guidance');
+    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya (test)';
+    modelTag.hidden = true;
+    result.classList.add('show');
+    if(!invoke){ resultText.textContent = 'Run this inside the Kaeya app to test.'; return; }
+    resultText.textContent = 'Looking for the "' + name + '" button and pointing at it…';
+    invoke('point_at', { name: name }).then(function(el){
+      if(el){
+        var esc = function(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+        resultText.innerHTML =
+          '<p><strong>Pointing at:</strong> ' + esc(el.name) + ' [' + el.ctype + '] @ ' + el.x + ',' + el.y + '</p>' +
+          '<p>Look at your screen — a green box + red arrow should be on the real button.</p>';
+      } else {
+        resultText.textContent = 'Could not find a "' + name + '" button on your last app. Try opening an email so Forward is visible.';
+      }
+    }).catch(function(err){
+      resultText.textContent = 'Point failed: ' + err;
+    });
+  }
+
   // The on-screen helper: take one photo of the screen and guide the user.
   function runScreenHelp(){
     if(running) return;
@@ -1437,6 +1489,8 @@
   $('cards').addEventListener('click', function(e){
     var c = e.target.closest('.chip'); if(!c) return;
     if(c.getAttribute('data-screen')){ runScreenHelp(); return; }
+    if(c.getAttribute('data-testuia')){ runReadButtonsTest(); return; }
+    if(c.getAttribute('data-pointtest')){ runPointTest(c.getAttribute('data-pointtest')); return; }
     if(c.getAttribute('data-soon')){
       var name = c.getAttribute('data-feature') || 'This feature';
       modelTag.hidden = true;

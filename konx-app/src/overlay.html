@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Kaeya pointer</title>
+<style>
+  /* Fully see-through layer that floats over the user's real screen. It never
+     intercepts clicks (the Rust side sets ignore_cursor_events). We draw only the
+     highlight box + arrow + label on the canvas; the rest stays transparent so the
+     real app shows through. */
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: transparent; }
+  #c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  /* Hidden unless something goes wrong, so the user never sees debug text. */
+  #status {
+    position: fixed; top: 8px; left: 8px; z-index: 10; display: none;
+    font: bold 14px Segoe UI, sans-serif; color: #fff;
+    background: rgba(0,0,0,0.75); padding: 6px 10px; border-radius: 6px;
+    white-space: pre;
+  }
+</style>
+</head>
+<body>
+<div id="status"></div>
+<canvas id="c"></canvas>
+<script>
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var statusEl = document.getElementById('status');
+  var clearTimer = null;
+
+  function showError(msg){
+    statusEl.style.display = 'block';
+    statusEl.textContent = msg;
+  }
+
+  function invoke(cmd, args){
+    var t = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    if (t) { try { return t(cmd, args || {}); } catch(e){} }
+    return null;
+  }
+
+  function draw(p){
+    canvas.width = p.monW;
+    canvas.height = p.monH;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    var rx = p.x - p.originX, ry = p.y - p.originY;
+
+    // green highlight box around the real element
+    var pad = 6;
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgb(30,190,90)';
+    ctx.strokeRect(rx - pad, ry - pad, p.w + 2*pad, p.h + 2*pad);
+
+    // red arrow pointing at it from the lower-left
+    var sx = rx - 120, sy = ry + p.h + 110;
+    if (sx < 10) sx = 10;
+    if (sy > canvas.height - 10) sy = canvas.height - 10;
+    var ex = rx - 4, ey = ry + Math.round(p.h/2);
+    ctx.strokeStyle = 'rgb(220,30,30)';
+    ctx.fillStyle = 'rgb(220,30,30)';
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+    var ang = Math.atan2(ey - sy, ex - sx), hl = 20;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - hl*Math.cos(ang - Math.PI/7), ey - hl*Math.sin(ang - Math.PI/7));
+    ctx.lineTo(ex - hl*Math.cos(ang + Math.PI/7), ey - hl*Math.sin(ang + Math.PI/7));
+    ctx.closePath(); ctx.fill();
+
+    var label = 'Kaeya: click here';
+    ctx.font = 'bold 22px Segoe UI, sans-serif';
+    var tw = ctx.measureText(label).width;
+    var lx = sx - 20, ly = sy + 8;
+    if (lx < 6) lx = 6;
+    ctx.fillStyle = 'rgba(20,20,20,0.90)';
+    ctx.fillRect(lx, ly, tw + 24, 38);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, lx + 12, ly + 27);
+
+    // Auto-clear the arrow after a few seconds and hide the overlay window.
+    if (clearTimer) clearTimeout(clearTimer);
+    var secs = p.seconds ? p.seconds : 8;
+    clearTimer = setTimeout(function(){
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      invoke('clear_point');
+    }, secs * 1000);
+  }
+
+  function listen(){
+    var ev = window.__TAURI__ && window.__TAURI__.event;
+    if (!ev) { setTimeout(listen, 80); return; }
+    ev.listen('kaeya-point', function(e){ try { draw(e.payload); } catch(err){ showError('draw error: ' + err); } });
+    var p = invoke('take_pending_point');
+    if (p && p.then) { p.then(function(v){ if (v) { try { draw(v); } catch(err){ showError('draw error: ' + err); } } }); }
+  }
+  listen();
+</script>
+</body>
+</html>

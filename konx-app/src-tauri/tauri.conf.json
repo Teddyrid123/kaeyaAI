@@ -39,6 +39,21 @@
         "shadow": false,
         "x": 1780,
         "y": 460
+      },
+      {
+        "label": "overlay",
+        "url": "overlay.html",
+        "title": "Kaeya pointer",
+        "width": 800,
+        "height": 600,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "shadow": false
       }
     ],
     "security": {

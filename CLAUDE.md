@@ -92,6 +92,24 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   Next steps for it: (a) server-side vision path (currently LOCAL key only — signed-in users with
   no local key fall to the demo brain); (b) v1.1 proactive nudges; (c) capture the monitor the
   target app is on (v1.0 grabs the primary monitor).
+- **On-screen pointing — CORE MECHANIC DONE & VERIFIED LIVE (2026-07-17).** Kaeya can now draw a
+  green box + red arrow ("Kaeya: click here") on the REAL on-screen button, using Windows
+  UIAutomation for the exact spot instead of the AI guessing pixels. Joseph confirmed it points at
+  Gmail's real email Forward button reliably, every attempt incl. the first. Pieces:
+  `src-tauri/src/uia.rs` (UIAutomation via the `windows` crate: `list_elements_for(hwnd)` reads
+  named elements + exact rects; `pick_target(els, term)` picks the match), Rust commands
+  `list_elements` / `point_at(name, label)` / `take_pending_point` / `clear_point`, and a third
+  transparent, click-through, always-on-top **`overlay`** window drawn by `src/overlay.html`
+  (HTML canvas). Two gotchas fixed: (1) the `overlay` window MUST be in `capabilities/default.json`
+  `windows` — without it the overlay gets zero permissions, can't receive the `kaeya-point` event,
+  and shows a blank/tinted full screen with no arrow; (2) `pick_target` disambiguation: dropped the
+  old "prefer any Hyperlink first" rule (grabbed a stray link → first point hit the browser toolbar
+  arrow); now = exact-name match, then LOWEST on screen (page button sits below the browser's top
+  toolbar nav). Also added `overlay` to the foreground-tracker exclude list.
+  **Triggered today only by TEMPORARY dev-test buttons** in `index.html` (`data-pointtest`,
+  `data-testuia`). NOT yet wired to real AI guidance. **Next (Joseph chose 2026-07-17): "make
+  pointing real"** — feed the UIAutomation name list to the AI so it picks WHICH element to point
+  at from a real question, guide one step at a time, then remove the dev-test buttons.
 
 ## Repo layout
 ```
