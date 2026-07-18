@@ -271,6 +271,25 @@
   .result .txt ol.steps li::before{ content:counter(step); position:absolute; left:0; top:-1px; width:24px; height:24px;
     display:grid; place-items:center; font-family:var(--font); font-weight:700; font-size:12.5px; color:#fff;
     background:linear-gradient(135deg,var(--accent-2),var(--violet)); border-radius:50%; }
+  /* "Guide me step by step": the Text list / On-screen choice + the step walker */
+  .guide-q{ font-weight:600; }
+  .guide-choice{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
+  .gbtn{ flex:1 1 180px; text-align:left; display:flex; flex-direction:column; gap:3px; cursor:pointer;
+    background:var(--card); border:1px solid var(--stroke); border-radius:13px; padding:12px 14px; font-family:var(--font); color:var(--ink); }
+  .gbtn:hover{ border-color:var(--accent); box-shadow:0 3px 14px rgba(0,0,0,.06); }
+  .gbtn b{ font-size:14.5px; }
+  .gbtn span{ font-size:12px; color:var(--ink-soft); line-height:1.35; }
+  .guide-count{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint); margin:0 0 4px; }
+  .guide-say{ font-size:16px; font-weight:600; line-height:1.5; margin:0 0 6px; }
+  .guide-look{ font-size:13px; color:var(--ink-soft); background:rgba(30,190,90,.10); border-radius:9px; padding:8px 11px; }
+  .guide-look.miss{ background:rgba(255,170,0,.10); }
+  .guide-nav{ display:flex; align-items:center; gap:10px; margin-top:14px; }
+  .gnav-back{ background:transparent; border:1px solid var(--stroke); color:var(--ink-soft); cursor:pointer;
+    font-family:var(--font); font-weight:600; font-size:13px; padding:9px 14px; border-radius:11px; }
+  .gnav-back:hover{ border-color:var(--stroke-2); color:var(--ink); }
+  .gnext{ display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#fff; border:none; cursor:pointer;
+    font-family:var(--font); font-weight:600; font-size:13.5px; padding:10px 16px; border-radius:11px; margin-left:auto; }
+  .gnext:hover{ filter:brightness(1.08); }
   .result .row{ display:flex; align-items:center; gap:10px; margin-top:13px; }
   .result .apply{ display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#fff;
     border:none; cursor:pointer; font-family:var(--font); font-weight:600; font-size:13.5px; padding:10px 16px; border-radius:11px;}
@@ -660,13 +679,11 @@
             <section class="fpanel" data-cat="context" role="tabpanel" hidden>
               <p class="fintro">Stuck on something on your screen? Kaeya can take one look at your screen and walk you through it in simple steps &mdash; or explain any text you&rsquo;ve selected, in plain language.</p>
               <div class="chips">
-                <button class="chip chip-primary" data-screen="1">Explain my screen</button>
+                <button class="chip chip-primary" data-guide="1">Guide me step by step</button>
                 <button class="chip" data-p="Explain this in simple, plain language a beginner can understand">Explain this text</button>
                 <button class="chip" data-p="Give clear step-by-step guidance for this, as simple numbered steps a beginner can follow">Step-by-step help</button>
-                <button class="chip" data-testuia="1" title="Dev test: read the buttons on your last app">Test: read buttons</button>
-                <button class="chip" data-pointtest="Forward" title="Dev test: point an arrow at the Forward button">Test: point at Forward</button>
               </div>
-              <p class="fhint">Tip: type your question below first &mdash; like &ldquo;how do I forward this email?&rdquo; &mdash; then tap &ldquo;Explain my screen&rdquo;. Kaeya only looks when you ask.</p>
+              <p class="fhint">Tip: type your question below first &mdash; like &ldquo;how do I forward this email?&rdquo; &mdash; then tap &ldquo;Guide me step by step&rdquo;. Kaeya only looks when you ask.</p>
             </section>
 
             <section class="fpanel" data-cat="desktop" role="tabpanel" hidden>
@@ -1406,57 +1423,149 @@
     return html || ('<p>' + t + '</p>');
   }
 
-  // DEV TEST (temporary): prove Kaeya can read the real buttons of your last app
-  // via Windows UIAutomation. Shows the count + first few elements it found.
-  function runReadButtonsTest(){
-    var invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
-    result.classList.add('guidance');
-    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya (test)';
-    modelTag.hidden = true;
-    result.classList.add('show');
-    if(!invoke){ resultText.textContent = 'Run this inside the Kaeya app to test.'; return; }
-    resultText.textContent = 'Reading the buttons on your last app…';
-    invoke('list_elements').then(function(els){
-      var n = els.length;
-      var first = els.slice(0, 12).map(function(e){
-        return e.name + ' [' + e.ctype + '] @ ' + e.x + ',' + e.y + ' (' + e.w + 'x' + e.h + ')';
-      });
-      var esc = function(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
-      resultText.innerHTML =
-        '<p><strong>Kaeya read ' + n + ' on-screen elements.</strong></p>' +
-        '<p>First few:</p><ul>' +
-        first.map(function(s){ return '<li>' + esc(s) + '</li>'; }).join('') +
-        '</ul>';
-    }).catch(function(err){
-      resultText.textContent = 'Could not read the screen: ' + err;
-    });
+  // ---- "Guide me step by step": Text list OR On-screen pointing ----
+  // Reactive on-screen mode: we hold the goal + the steps already done, and ask
+  // the engine for the next step against a fresh look at the screen each time.
+  var guideGoal = '', guideHistory = [], guideCurrent = null,
+      guideModelLabel = '', guideEngine = '';
+  var GUIDE_MAX_STEPS = 12;   // safety stop so a never-"done" goal can't loop forever
+
+  function tauriInvoke(){
+    return window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   }
 
-  // DEV TEST (temporary): point a live arrow at a named button (e.g. "Forward")
-  // on the user's last app, via UIAutomation + the see-through overlay.
-  function runPointTest(name){
-    var invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  // Clicking "Guide me step by step" offers the two ways to be helped.
+  function askGuideMode(){
+    var q = input.value.trim();
     result.classList.add('guidance');
-    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya (test)';
+    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya can help';
+    modelTag.hidden = true;
+    resultText.innerHTML =
+      '<p class="guide-q">How would you like Kaeya to help' +
+        (q ? ' with &ldquo;' + escHtml(q) + '&rdquo;' : '') + '?</p>' +
+      '<div class="guide-choice">' +
+        '<button type="button" class="gbtn" data-guidemode="screen"><b>&#128073; On-screen</b>' +
+          '<span>Kaeya points at the real buttons, one step at a time</span></button>' +
+        '<button type="button" class="gbtn" data-guidemode="text"><b>&#128196; Text list</b>' +
+          '<span>Kaeya writes the steps out for you to read</span></button>' +
+      '</div>';
+    result.classList.add('show');
+    result.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  // On-screen mode: start a reactive guide — first fresh look at the screen.
+  function runGuide(){
+    if(running) return;
+    guideGoal = input.value.trim() ||
+      'Guide me through what I am trying to do on my screen.';
+    guideHistory = [];
+    guideCurrent = null;
+    result.classList.add('guidance');
+    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya can help';
     modelTag.hidden = true;
     result.classList.add('show');
-    if(!invoke){ resultText.textContent = 'Run this inside the Kaeya app to test.'; return; }
-    resultText.textContent = 'Looking for the "' + name + '" button and pointing at it…';
-    invoke('point_at', { name: name }).then(function(el){
-      if(el){
-        var esc = function(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+    result.scrollIntoView({behavior:'smooth', block:'nearest'});
+    fetchGuideStep();
+  }
+
+  // Ask the engine for the next step against a fresh look at the current screen.
+  function fetchGuideStep(){
+    running = true;
+    var num = guideHistory.length + 1;
+    resultText.innerHTML =
+      '<p class="guide-count">Step ' + num + '</p>' +
+      '<p class="guide-say">Kaeya is looking at your screen…</p>';
+    KonxAI.runGuideStep(guideGoal, guideHistory).then(function(out){
+      running = false;
+      guideModelLabel = out.modelLabel; guideEngine = out.engine;
+      // Couldn't look at the screen (no key / not in app) — offer the text list.
+      if(out.engine === 'mock' && !out.say){
         resultText.innerHTML =
-          '<p><strong>Pointing at:</strong> ' + esc(el.name) + ' [' + el.ctype + '] @ ' + el.x + ',' + el.y + '</p>' +
-          '<p>Look at your screen — a green box + red arrow should be on the real button.</p>';
-      } else {
-        resultText.textContent = 'Could not find a "' + name + '" button on your last app. Try opening an email so Forward is visible.';
+          '<p>Kaeya couldn’t look at your screen just now.</p>' +
+          '<div class="guide-choice"><button type="button" class="gbtn" data-guidemode="text">' +
+          '<b>&#128196; Show me a text list instead</b></button></div>';
+        modelTag.hidden = true;
+        return;
       }
-    }).catch(function(err){
-      resultText.textContent = 'Point failed: ' + err;
+      // Goal finished (or nothing more to do) — celebrate and stop.
+      if(out.done || !out.say){
+        endGuide(out.say);
+        return;
+      }
+      guideCurrent = out;
+      showGuideStep();
+    }).catch(function(){
+      running = false;
+      resultText.textContent = 'Something went wrong looking at your screen. Please try again.';
     });
   }
 
-  // The on-screen helper: take one photo of the screen and guide the user.
+  // Render the current step + point the arrow at its element (if any). The next
+  // step is fetched fresh (re-reading the live screen) only when the user taps
+  // Next — so a button that appears after this action is seen in time.
+  function showGuideStep(){
+    var invoke = tauriInvoke();
+    var step = guideCurrent;
+    var num = guideHistory.length + 1;
+
+    resultText.innerHTML =
+      '<p class="guide-count">Step ' + num + '</p>' +
+      '<p class="guide-say">' + escHtml(step.say) + '</p>' +
+      '<p class="guide-look" id="guideLook"' + (step.point ? '' : ' style="display:none"') + '></p>' +
+      '<div class="guide-nav">' +
+        '<button type="button" class="gnext" data-guidenext="1">Next &rarr;</button>' +
+        '<button type="button" class="gnav-back" data-guidestop="1">Stop</button>' +
+      '</div>';
+
+    modelTag.innerHTML =
+      '<span class="dot"></span> Handled by <b>' + guideModelLabel + '</b> ' +
+      '<span class="tier">on-screen guide</span>' +
+      (guideEngine === 'mock' ? ' <span class="tier warn">demo brain</span>' : ' <span class="tier">live</span>');
+    modelTag.hidden = false;
+
+    // Draw the arrow, then set the hint based on whether we actually found the
+    // real element — never claim a green arrow that didn't draw.
+    var look = document.getElementById('guideLook');
+    function noArrow(){
+      if(look){
+        look.classList.add('miss');
+        look.innerHTML = 'Look for <b>' + escHtml(step.point) + '</b> on your screen and click it.';
+      }
+    }
+    if(step.point && invoke){
+      invoke('point_at', { name: step.point, seconds: 60 }).then(function(el){
+        if(!look) return;
+        if(el){
+          look.classList.remove('miss');
+          look.innerHTML = '&#128073; Look at your screen — the green arrow is on <b>' +
+            escHtml(el.name) + '</b>.';
+        } else { noArrow(); }
+      }).catch(noArrow);
+    } else if(invoke){
+      invoke('clear_point').catch(function(){});
+    }
+  }
+
+  // User did the step and tapped Next: remember it, then look again for the next.
+  function guideNext(){
+    if(!guideCurrent || running) return;
+    guideHistory.push(guideCurrent.say);
+    guideCurrent = null;
+    if(guideHistory.length >= GUIDE_MAX_STEPS){ endGuide(); return; }
+    fetchGuideStep();
+  }
+
+  function endGuide(finalMsg){
+    var invoke = tauriInvoke();
+    if(invoke) invoke('clear_point').catch(function(){});
+    guideCurrent = null; guideHistory = [];
+    var msg = (finalMsg && finalMsg.trim()) ? escHtml(finalMsg.trim()) : 'You’re all set! &#127881;';
+    resultText.innerHTML = '<p><strong>' + msg + '</strong></p>' +
+      '<p>Ask Kaeya anything else, anytime.</p>';
+    modelTag.hidden = true;
+  }
+
+  // The on-screen helper (Text list mode): one photo, plain numbered steps.
   function runScreenHelp(){
     if(running) return;
     running = true;
@@ -1488,9 +1597,7 @@
 
   $('cards').addEventListener('click', function(e){
     var c = e.target.closest('.chip'); if(!c) return;
-    if(c.getAttribute('data-screen')){ runScreenHelp(); return; }
-    if(c.getAttribute('data-testuia')){ runReadButtonsTest(); return; }
-    if(c.getAttribute('data-pointtest')){ runPointTest(c.getAttribute('data-pointtest')); return; }
+    if(c.getAttribute('data-guide')){ askGuideMode(); return; }
     if(c.getAttribute('data-soon')){
       var name = c.getAttribute('data-feature') || 'This feature';
       modelTag.hidden = true;
@@ -1501,6 +1608,16 @@
     }
     var p = c.getAttribute('data-p');
     if(p){ input.value = p; run(p); }
+  });
+  // Buttons Kaeya draws inside the result box: the Text list / On-screen choice,
+  // and the step-walker's Back / Next.
+  result.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var mode = b.getAttribute('data-guidemode');
+    if(mode === 'screen'){ runGuide(); return; }
+    if(mode === 'text'){ runScreenHelp(); return; }
+    if(b.getAttribute('data-guidenext')){ guideNext(); return; }
+    if(b.getAttribute('data-guidestop')){ endGuide(); return; }
   });
   $('sendBtn').addEventListener('click', function(){ if(input.value.trim()) run(input.value); });
   input.addEventListener('keydown', function(e){

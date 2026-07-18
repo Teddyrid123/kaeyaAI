@@ -136,6 +136,13 @@ const SYSTEM_PROMPT: &str = "You are Kaeya, a writing assistant. Apply the user'
 // plus their question, and answers with simple, friendly, step-by-step guidance.
 const VISION_PROMPT: &str = "You are Kaeya, a warm, friendly helper for people who are NOT comfortable with computers. You are shown a photo of the user's screen and their question. Answer ONLY what they asked, based on what is really on their screen. Follow these rules strictly: keep it short and to the point; use everyday words, never technical jargon; when you give steps, write each step on its OWN line as a numbered list (1., 2., 3.), just one short sentence per step; tell them plainly where to look and what to click (for example: 'At the bottom, click the button that says Forward'); do NOT use asterisks, stars, markdown, bold symbols, hashes, or any special formatting characters; do NOT add a long introduction or a summary sentence at the end. If the answer is not visible on the screen, say so kindly in one short line, then give one or two simple tips.";
 
+// On-screen step-by-step guidance, ONE step at a time. The model is shown a photo
+// of the CURRENT screen plus the exact clickable element names on it, the user's
+// overall goal, and the steps already done, and returns just the SINGLE next step
+// (or done=true). Re-asking after each action means later buttons that only appear
+// once the user clicks (Gmail's Send after Forward) are seen when their turn comes.
+const STEP_PROMPT: &str = "You are Kaeya, a warm, patient helper for people who are NOT comfortable with computers. You are shown a photo of the user's CURRENT screen and a list of the exact clickable things on it, with their real names. You are told the user's overall goal and the steps they have already done. Decide the SINGLE next thing they should do right now, based only on what is ACTUALLY on the current screen. Reply with ONLY a JSON object and nothing else — no markdown, no code fences, no text before or after. Use exactly this shape: {\"say\":\"one short friendly sentence telling them what to do next\",\"point\":\"the exact Name to point at, copied from the list, or an empty string if this step points at nothing\",\"done\":false}. Rules: 'say' is one short sentence in everyday words, no jargon; when the step means clicking something, 'point' MUST be a Name copied from the list, and copy ONLY the Name, never the '[Type]' part in square brackets; the Name in the list is the control's REAL name — use it even when the button only shows a single letter or a small icon (for example Microsoft Word's bold button is named 'Bold' in the list, not 'B'; its underline button is 'Underline', not 'U') — always copy the full Name from the list, never the single letter or symbol drawn on the button; if the step is to TYPE something, set 'point' to the box or field where they should type it (typing fields appear in the list as Edit or ComboBox) so Kaeya can point at it; only use an empty 'point' when there is genuinely nothing on the screen to point at; set 'done' to true ONLY when the goal is ALREADY completely finished with NOTHING left for the user to click or type (for example, you can see the email has already been sent); while ANY action still remains — including a final Send button — 'done' MUST be false and you MUST give that action as the step with its 'point' (do NOT describe it as a goodbye); when 'done' is true, put a short warm congratulations in 'say' and leave 'point' empty; never invent a name that is not in the list; no extra keys; output nothing but the JSON.";
+
 /// A failed model call: the HTTP status (0 = network error) + the message.
 struct CallErr {
     status: u16,
@@ -340,6 +347,7 @@ async fn call_gemini_vision(
     client: &reqwest::Client,
     key: &str,
     model: &str,
+    system: &str,
     prompt: &str,
     image_b64: &str,
     temp: f64,
@@ -349,7 +357,7 @@ async fn call_gemini_vision(
         model
     );
     let body = serde_json::json!({
-        "systemInstruction": { "parts": [ { "text": VISION_PROMPT } ] },
+        "systemInstruction": { "parts": [ { "text": system } ] },
         "contents": [ { "parts": [
             { "text": prompt },
             { "inline_data": { "mime_type": "image/jpeg", "data": image_b64 } }
@@ -386,6 +394,7 @@ async fn call_openai_vision(
     client: &reqwest::Client,
     key: &str,
     model: &str,
+    system: &str,
     prompt: &str,
     image_b64: &str,
     temp: f64,
@@ -395,7 +404,7 @@ async fn call_openai_vision(
         "model": model,
         "temperature": temp,
         "messages": [
-            { "role": "system", "content": VISION_PROMPT },
+            { "role": "system", "content": system },
             { "role": "user", "content": [
                 { "type": "text", "text": prompt },
                 { "type": "image_url", "image_url": { "url": data_url } }
@@ -428,9 +437,72 @@ async fn call_openai_vision(
     Ok(out)
 }
 
+/// Run a vision request through the Kaeya SERVER proxy (Supabase `ai` function)
+/// with the signed-in user's token — so the real key stays on the server and
+/// usage is metered per plan. The app builds `system` + `prompt`; the server just
+/// runs the model and returns its raw text. Returns the model's text, or a
+/// CallErr whose message is "SERVER_LIMIT" (daily cap) / "SERVER_AUTH" (login
+/// expired) so the caller knows NOT to silently bypass it with the local key.
+async fn call_server_vision(
+    client: &reqwest::Client,
+    url: &str,
+    anon: &str,
+    token: &str,
+    system: &str,
+    prompt: &str,
+    image_b64: &str,
+    provider: &str,
+    tier: &str,
+    model: &str,
+    temp: f64,
+) -> Result<String, CallErr> {
+    let endpoint = format!("{}/functions/v1/ai", url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "image": image_b64,
+        "system": system,
+        "prompt": prompt,
+        "provider": provider,
+        "tier": tier,
+        "model": model,
+        "temperature": temp,
+    });
+    let resp = client
+        .post(&endpoint)
+        .header("apikey", anon)
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| CallErr { status: 0, message: e.to_string() })?;
+    let status = resp.status().as_u16();
+    let ok = resp.status().is_success();
+    let v: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CallErr { status, message: e.to_string() })?;
+    if !ok {
+        if status == 429 {
+            return Err(CallErr { status, message: "SERVER_LIMIT".into() });
+        }
+        if status == 401 {
+            return Err(CallErr { status, message: "SERVER_AUTH".into() });
+        }
+        return Err(CallErr {
+            status,
+            message: v["message"].as_str().unwrap_or("Server request failed").to_string(),
+        });
+    }
+    let out = v["text"].as_str().unwrap_or("").trim().to_string();
+    if out.is_empty() {
+        return Err(CallErr { status, message: "Server returned nothing".into() });
+    }
+    Ok(out)
+}
+
 /// Called by the "Explain my screen" flow. Takes one photo of the screen, sends
 /// it with the user's question to the vision model, and returns plain-language
-/// step-by-step guidance. Same transient-overload retry as `ai_generate`.
+/// step-by-step guidance. Server-first when signed in (`auth_token`), else the
+/// local key. Same transient-overload retry as `ai_generate` on the local path.
 #[tauri::command]
 async fn screen_help(
     app: tauri::AppHandle,
@@ -438,18 +510,12 @@ async fn screen_help(
     provider: String,
     model: String,
     temperature: Option<f64>,
+    auth_token: Option<String>,
+    server_url: Option<String>,
+    server_anon: Option<String>,
 ) -> Result<AiResult, String> {
-    let keys = load_keys();
     let temp = temperature.unwrap_or(0.4);
-
-    let key = match provider.as_str() {
-        "openai" => keys.openai.trim().to_string(),
-        "gemini" => keys.gemini.trim().to_string(),
-        other => return Err(format!("Unknown provider: {}", other)),
-    };
-    if key.is_empty() {
-        return Err("NO_KEY".into());
-    }
+    let prompt = question.trim().to_string();
 
     // Hide our own window first so the photo shows the app BEHIND Kaeya (the one
     // the user actually needs help with), not Kaeya itself. We restore it right
@@ -472,13 +538,42 @@ async fn screen_help(
     let image_b64 = capture?;
 
     let client = reqwest::Client::new();
-    let is_openai = provider == "openai";
-    let prompt = question.trim().to_string();
 
+    // SERVER FIRST when signed in: the real key stays on the server, usage is
+    // metered per plan. A daily-limit / expired-login refusal must NOT be bypassed
+    // by the local key, so surface it; other server errors fall through to local.
+    if let (Some(token), Some(url), Some(anon)) = (&auth_token, &server_url, &server_anon) {
+        if !token.is_empty() && !url.is_empty() {
+            match call_server_vision(
+                &client, url, anon, token, VISION_PROMPT, &prompt, &image_b64, &provider, "large", &model, temp,
+            )
+            .await
+            {
+                Ok(text) => return Ok(AiResult { text, engine: provider }),
+                Err(e) if e.message == "SERVER_LIMIT" || e.message == "SERVER_AUTH" => {
+                    return Err(e.message)
+                }
+                Err(_) => { /* fall through to the local key */ }
+            }
+        }
+    }
+
+    // LOCAL fallback: offline / not signed in / server unreachable.
+    let keys = load_keys();
+    let key = match provider.as_str() {
+        "openai" => keys.openai.trim().to_string(),
+        "gemini" => keys.gemini.trim().to_string(),
+        other => return Err(format!("Unknown provider: {}", other)),
+    };
+    if key.is_empty() {
+        return Err("NO_KEY".into());
+    }
+
+    let is_openai = provider == "openai";
     let first = if is_openai {
-        call_openai_vision(&client, &key, &model, &prompt, &image_b64, temp).await
+        call_openai_vision(&client, &key, &model, VISION_PROMPT, &prompt, &image_b64, temp).await
     } else {
-        call_gemini_vision(&client, &key, &model, &prompt, &image_b64, temp).await
+        call_gemini_vision(&client, &key, &model, VISION_PROMPT, &prompt, &image_b64, temp).await
     };
 
     let out = match first {
@@ -487,9 +582,9 @@ async fn screen_help(
             let small = small_model(&provider);
             if model != small && is_transient(&e) {
                 let alt = if is_openai {
-                    call_openai_vision(&client, &key, small, &prompt, &image_b64, temp).await
+                    call_openai_vision(&client, &key, small, VISION_PROMPT, &prompt, &image_b64, temp).await
                 } else {
-                    call_gemini_vision(&client, &key, small, &prompt, &image_b64, temp).await
+                    call_gemini_vision(&client, &key, small, VISION_PROMPT, &prompt, &image_b64, temp).await
                 };
                 alt.map_err(|_| e.message)?
             } else {
@@ -499,6 +594,220 @@ async fn screen_help(
     };
 
     Ok(AiResult { text: out, engine: provider })
+}
+
+/// One reactive guidance step returned to the UI: what to tell the user (`say`),
+/// the exact element name to draw the arrow on (`point`, empty when nothing to
+/// point at), and whether the goal is now finished (`done`). Kaeya asks for ONE
+/// step at a time, re-reading the CURRENT screen each call — so a button that only
+/// appears after an earlier click (Gmail's Send after Forward) is seen in turn.
+#[derive(serde::Serialize)]
+struct GuideStepOut {
+    say: String,
+    point: String,
+    done: bool,
+    engine: String,
+}
+
+#[derive(serde::Deserialize)]
+struct RawNext {
+    #[serde(default)]
+    say: String,
+    #[serde(default)]
+    point: String,
+    #[serde(default)]
+    done: bool,
+}
+
+/// Pull the single next-step object out of the model's reply. Models sometimes
+/// wrap the JSON in ``` fences or add a stray sentence, so we take the outermost
+/// { ... } and parse that. Returns None if there's no JSON at all.
+fn parse_next(raw: &str) -> Option<RawNext> {
+    let start = raw.find('{')?;
+    let end = raw.rfind('}')?;
+    if end < start {
+        return None;
+    }
+    serde_json::from_str(&raw[start..=end]).ok()
+}
+
+/// Read the tracked window's clickable elements and return a short, de-duplicated
+/// list of "- Name [Type]" lines for the interactive controls only — the menu of
+/// real names the model must copy its `point` values from. Capped so the prompt
+/// stays small on slow connections.
+#[cfg(windows)]
+fn onscreen_element_lines(hwnd: isize) -> Vec<String> {
+    let els = match uia::list_elements_for(hwnd) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut lines = Vec::new();
+    for e in els {
+        let keep = matches!(
+            e.ctype.as_str(),
+            "Button" | "Hyperlink" | "MenuItem" | "Edit" | "TabItem" | "CheckBox" | "ComboBox" | "ListItem"
+        );
+        if !keep {
+            continue;
+        }
+        let mut name = e.name.trim().to_string();
+        if name.is_empty() {
+            continue;
+        }
+        if name.chars().count() > 80 {
+            name = name.chars().take(80).collect();
+        }
+        if !seen.insert(name.to_lowercase()) {
+            continue;
+        }
+        lines.push(format!("- {} [{}]", name, e.ctype));
+        if lines.len() >= 120 {
+            break;
+        }
+    }
+    lines
+}
+
+/// "Make pointing real", reactive: take one photo of the CURRENT screen, read the
+/// real clickable element names on it, and ask the vision model for the SINGLE
+/// next step toward `goal` given the steps already done (`history`). The frontend
+/// calls this once per step (re-reading the live screen each time), draws the
+/// arrow via `point_at`, and loops until `done`. Same transient-overload retry as
+/// `screen_help`. Local key only for now (mirrors the vision path).
+#[tauri::command]
+async fn guide_step(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Target>,
+    goal: String,
+    history: Vec<String>,
+    provider: String,
+    model: String,
+    temperature: Option<f64>,
+    auth_token: Option<String>,
+    server_url: Option<String>,
+    server_anon: Option<String>,
+) -> Result<GuideStepOut, String> {
+    let temp = temperature.unwrap_or(0.3);
+
+    // Read the CURRENT clickable elements of the app the user is in.
+    let hwnd = *state.0.lock().unwrap();
+    #[cfg(windows)]
+    let element_lines = tauri::async_runtime::spawn_blocking(move || onscreen_element_lines(hwnd))
+        .await
+        .map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    let element_lines: Vec<String> = {
+        let _ = hwnd;
+        Vec::new()
+    };
+
+    // Hide our own window, photograph the app behind it, then restore.
+    let main = app.get_webview_window("main");
+    if let Some(w) = &main {
+        let _ = w.hide();
+    }
+    let capture = tauri::async_runtime::spawn_blocking(|| {
+        thread::sleep(Duration::from_millis(200));
+        capture_screen_jpeg()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if let Some(w) = &main {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    let image_b64 = capture?;
+
+    let list = if element_lines.is_empty() {
+        "(no clickable items were detected)".to_string()
+    } else {
+        element_lines.join("\n")
+    };
+    let done_so_far = if history.is_empty() {
+        "none yet".to_string()
+    } else {
+        history
+            .iter()
+            .enumerate()
+            .map(|(i, s)| format!("{}. {}", i + 1, s))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let prompt = format!(
+        "The user's goal: \"{}\"\n\nSteps already done:\n{}\n\nThe clickable things on the screen RIGHT NOW are:\n{}\n\nWhat is the single next step? JSON only.",
+        goal.trim(),
+        done_so_far,
+        list
+    );
+
+    let client = reqwest::Client::new();
+
+    // Get the raw model reply (a JSON step) from the SERVER first when signed in,
+    // else the LOCAL key. A daily-limit / expired-login refusal is surfaced (not
+    // bypassed by the local key); other server errors fall through to local.
+    let mut raw: Option<String> = None;
+    if let (Some(token), Some(url), Some(anon)) = (&auth_token, &server_url, &server_anon) {
+        if !token.is_empty() && !url.is_empty() {
+            match call_server_vision(
+                &client, url, anon, token, STEP_PROMPT, &prompt, &image_b64, &provider, "large", &model, temp,
+            )
+            .await
+            {
+                Ok(text) => raw = Some(text),
+                Err(e) if e.message == "SERVER_LIMIT" || e.message == "SERVER_AUTH" => {
+                    return Err(e.message)
+                }
+                Err(_) => { /* fall through to the local key */ }
+            }
+        }
+    }
+
+    if raw.is_none() {
+        let keys = load_keys();
+        let key = match provider.as_str() {
+            "openai" => keys.openai.trim().to_string(),
+            "gemini" => keys.gemini.trim().to_string(),
+            other => return Err(format!("Unknown provider: {}", other)),
+        };
+        if key.is_empty() {
+            return Err("NO_KEY".into());
+        }
+
+        let is_openai = provider == "openai";
+        let first = if is_openai {
+            call_openai_vision(&client, &key, &model, STEP_PROMPT, &prompt, &image_b64, temp).await
+        } else {
+            call_gemini_vision(&client, &key, &model, STEP_PROMPT, &prompt, &image_b64, temp).await
+        };
+
+        let text = match first {
+            Ok(out) => out,
+            Err(e) => {
+                let small = small_model(&provider);
+                if model != small && is_transient(&e) {
+                    let alt = if is_openai {
+                        call_openai_vision(&client, &key, small, STEP_PROMPT, &prompt, &image_b64, temp).await
+                    } else {
+                        call_gemini_vision(&client, &key, small, STEP_PROMPT, &prompt, &image_b64, temp).await
+                    };
+                    alt.map_err(|_| e.message)?
+                } else {
+                    return Err(e.message);
+                }
+            }
+        };
+        raw = Some(text);
+    }
+
+    let raw = raw.unwrap_or_default();
+    let next = parse_next(&raw).ok_or_else(|| "COULD_NOT_PLAN".to_string())?;
+    Ok(GuideStepOut {
+        say: next.say.trim().to_string(),
+        point: next.point.trim().to_string(),
+        done: next.done,
+        engine: provider,
+    })
 }
 
 /// Read the real on-screen buttons/links/fields of the app the user was last in
@@ -521,6 +830,26 @@ async fn list_elements() -> Result<Vec<serde_json::Value>, String> {
     Err("Reading on-screen elements is only available on Windows.".into())
 }
 
+/// The plan model is given the element list as "Name [Type]" lines and sometimes
+/// copies the WHOLE line (e.g. "Forward [Button]") into its `point`, which then
+/// fails to match the real element named just "Forward". Strip a trailing
+/// " [..]" or " (..)" annotation so the name matches the real control.
+#[cfg(windows)]
+fn clean_target_name(name: &str) -> String {
+    let mut s = name.trim();
+    if s.ends_with(']') {
+        if let Some(idx) = s.rfind(" [") {
+            s = s[..idx].trim_end();
+        }
+    }
+    if s.ends_with(')') {
+        if let Some(idx) = s.rfind(" (") {
+            s = s[..idx].trim_end();
+        }
+    }
+    s.to_string()
+}
+
 /// Point at a named element (e.g. "Forward") in the user's last app: find it via
 /// UIAutomation, pick the best match, then show the see-through overlay and draw
 /// an arrow on its exact spot. Returns the element chosen (or None if not found).
@@ -531,12 +860,15 @@ async fn point_at(
     state: tauri::State<'_, Target>,
     pending: tauri::State<'_, PendingPoint>,
     name: String,
+    seconds: Option<u64>,
 ) -> Result<Option<uia::UiaEl>, String> {
+    let name = clean_target_name(&name);
     let hwnd = *state.0.lock().unwrap();
     let els = tauri::async_runtime::spawn_blocking(move || uia::list_elements_for(hwnd))
         .await
         .map_err(|e| e.to_string())??;
     let target = uia::pick_target(&els, &name);
+    let seconds = seconds.unwrap_or(8);
 
     if let Some(t) = target.clone() {
         let overlay = app
@@ -552,7 +884,7 @@ async fn point_at(
             "x": t.x, "y": t.y, "w": t.w, "h": t.h,
             "originX": pos.x, "originY": pos.y,
             "monW": size.width, "monH": size.height,
-            "name": t.name, "seconds": 8
+            "name": t.name, "seconds": seconds
         });
         // Store BEFORE showing so the overlay can pull it once its webview loads
         // (covers the first-point race), then also emit for the already-loaded case.
@@ -579,7 +911,7 @@ fn take_pending_point(pending: tauri::State<'_, PendingPoint>) -> Option<serde_j
 
 #[cfg(not(windows))]
 #[tauri::command]
-async fn point_at(_name: String) -> Result<Option<serde_json::Value>, String> {
+async fn point_at(_name: String, _seconds: Option<u64>) -> Result<Option<serde_json::Value>, String> {
     Err("Pointing is only available on Windows.".into())
 }
 
@@ -785,6 +1117,7 @@ pub fn run() {
             snap_orb,
             ai_generate,
             screen_help,
+            guide_step,
             list_elements,
             point_at,
             clear_point,

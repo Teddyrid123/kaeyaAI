@@ -89,8 +89,9 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   Contextual Guidance tab is real: it takes one photo of the screen and returns simple, numbered,
   plain-language guidance. Joseph tested it live on Gmail end-to-end. This is the core-wedge
   feature (see Product direction). Details in "The on-screen helper" below.
-  Next steps for it: (a) server-side vision path (currently LOCAL key only — signed-in users with
-  no local key fall to the demo brain); (b) v1.1 proactive nudges; (c) capture the monitor the
+  Next steps for it: (a) server-side vision path — **DONE & VERIFIED LIVE 2026-07-18** (keyless test
+  passed: signed-in users hit the Supabase `ai` proxy instead of falling to the demo brain; see
+  "Server-first vision" below); (b) v1.1 proactive nudges; (c) capture the monitor the
   target app is on (v1.0 grabs the primary monitor).
 - **On-screen pointing — CORE MECHANIC DONE & VERIFIED LIVE (2026-07-17).** Kaeya can now draw a
   green box + red arrow ("Kaeya: click here") on the REAL on-screen button, using Windows
@@ -110,6 +111,39 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   `data-testuia`). NOT yet wired to real AI guidance. **Next (Joseph chose 2026-07-17): "make
   pointing real"** — feed the UIAutomation name list to the AI so it picks WHICH element to point
   at from a real question, guide one step at a time, then remove the dev-test buttons.
+- **"Make pointing real" — DONE & VERIFIED LIVE 2026-07-18 (incl. full multi-step).** Pointing is wired
+  to real AI guidance, one step at a time; dev-test buttons removed. The engine is **reactive**: the
+  `guide_step` command takes the user's `goal` + the `history` of steps already done, takes a FRESH
+  screenshot + on-screen element list each call, and returns the SINGLE next step `{say, point, done}`
+  (`STEP_PROMPT`, `parse_next`). The frontend (`KonxAI.runGuideStep` → `fetchGuideStep`/`showGuideStep`
+  loop, Next/Stop, `GUIDE_MAX_STEPS=12`) draws the arrow via `point_at(name, 60)` and re-fetches against
+  the live screen on each Next — so buttons that only appear after a click are seen in turn. Joseph ran
+  "how do I forward this email to someone and send it?" and the green arrow landed on **every** step
+  (Forward → To box → Send), ending only after Send. Bugs fixed along the way: (1) the model copied the
+  whole "Forward [Button]" list line into `point` → `clean_target_name` strips the trailing "[Type]";
+  (2) an upfront all-steps planner could only see the first screen → replaced with the reactive
+  `guide_step`; (3) typing steps returned an empty `point` and the Send step prematurely set `done=true`
+  → STEP_PROMPT now points at typing fields and treats a remaining Send as a real step, plus the element
+  list cap was raised 60→120 so compose fields are always included. Result messaging is honest (green
+  "arrow is on X" only when `point_at` actually found it; amber "look for X" otherwise). New Rust
+  command **`guide_plan`** (`lib.rs`): hides `main` → captures the screen (`capture_screen_jpeg`) +
+  reads the real clickable element NAMES (`onscreen_element_lines` filters UIAutomation to Button/
+  Hyperlink/MenuItem/Edit/TabItem/CheckBox/ComboBox/ListItem, dedupes, caps 60) → sends photo + name
+  list to the vision model with a new **`PLAN_PROMPT`** that returns strict JSON
+  `{steps:[{say, point}]}`, where `point` is a name copied verbatim from the list; `parse_plan`
+  tolerantly extracts the outermost `{..}`. Same transient-overload small-model retry as `screen_help`;
+  local key only. `call_gemini_vision`/`call_openai_vision` were refactored to take a `system` param so
+  both `VISION_PROMPT` and `PLAN_PROMPT` reuse them. `point_at` now takes an optional `seconds` (the
+  guide passes 60 so the arrow holds while a slow user reads; default 8). Frontend: `KonxAI.runGuidePlan`
+  (`konx-ai.js`) mirrors `runVision`; the Contextual Guidance tab now has ONE **"Guide me step by step"**
+  button (`data-guide`) that opens a small choice — **👉 On-screen** (the step-walker: `runGuide` →
+  `showGuideStep`, "Step X of N", `point_at(name, 60)` per step, Back/Next, "You're all set 🎉" + 
+  `clear_point` at the end) vs **📄 Text list** (the existing `runScreenHelp`). Empty plan → gracefully
+  offers the text list. Re-pointing each step works because `point_at` re-reads elements LIVE, so a step
+  for a button that only appears after an earlier click (Gmail Send after Forward) still lands. **Still
+  TODO after the live test:** field-test on a real low-literacy user; server-side vision path (DONE
+  2026-07-18 — see "Server-first vision"); capture
+  the monitor the target app is on (v1.0 grabs the primary).
 
 ## Repo layout
 ```
@@ -175,9 +209,15 @@ vero/
 - Frontend: `formatGuidance` (in `index.html`) renders the answer as a clean numbered list
   (HTML-escaped; `**bold**`→`<strong>`, strips `* # \``, one step per line, styled step circles).
   Guidance results get `.result.guidance` (hides Replace/Save — it's advice, not a rewrite).
-- **Local key only for now:** `screen_help` reads `%APPDATA%\KonX\keys.json`; there is no server
-  vision path yet, so a signed-in user with no local key falls to the demo brain. Wiring vision
-  into the Supabase `ai` function is the next step. New Rust deps: `xcap`, `image` (jpeg), `base64`.
+- **Server-first vision — DONE & VERIFIED LIVE (2026-07-18, keyless test passed):** `screen_help` and `guide_step`
+  now route through the Supabase `ai` proxy when signed in — Rust captures the screen + builds the
+  prompt, then `call_server_vision` POSTs `{image, system, prompt, provider, tier, model, temperature}`
+  to `/functions/v1/ai` with the JWT + `apikey` anon; the server runs the vision model with its key and
+  meters it (same quota as text). They take optional `auth_token`/`server_url`/`server_anon` (passed by
+  `konx-ai.js` via `serverAuth()`); a 429/401 is surfaced as `SERVER_LIMIT`/`SERVER_AUTH` (NOT bypassed
+  by the local key), other server errors fall through to the **local key** (`%APPDATA%\KonX\keys.json`),
+  then the demo brain. So a signed-in user with no local key now gets real vision. Rust deps: `xcap`,
+  `image` (jpeg), `base64`. See "Backend (LIVE)" for the Edge Function's vision branch.
 
 ## The AI model-router (`src/konx-ai.js` → `window.KonxAI`)
 - Classifies each request as **small** or **large** task: short text + simple instruction

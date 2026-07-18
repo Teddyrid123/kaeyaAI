@@ -240,10 +240,25 @@
   // Turn a raw provider error into a short, human reason for the badge.
   function classifyError(err) {
     var s = ("" + (err && err.message ? err.message : err)).toLowerCase();
+    if (s.indexOf("server_limit") !== -1) return "limit";   // server daily cap hit
+    if (s.indexOf("server_auth") !== -1) return "auth";     // server login expired
     if (s.indexOf("no_key") !== -1 || s.indexOf("no key") !== -1) return "no-key";
     if (s.indexOf("429") !== -1 || s.indexOf("quota") !== -1 || s.indexOf("rate") !== -1) return "limit";
     if (s.indexOf("insufficient") !== -1 || s.indexOf("billing") !== -1) return "billing";
     return "offline";
+  }
+
+  // The signed-in server auth to hand to the native vision commands, so they can
+  // route through the Kaeya backend proxy (server key + metering) instead of the
+  // local key. Resolves to {} when not signed in / no token — the Rust side then
+  // uses the local key, then the demo brain.
+  function serverAuth() {
+    var Auth = window.KaeyaAuth;
+    if (!Auth || !Auth.isSignedIn()) return Promise.resolve({});
+    return Auth.getAccessToken().then(function (token) {
+      if (!token) return {};
+      return { authToken: token, serverUrl: Auth.url, serverAnon: Auth.anon };
+    }).catch(function () { return {}; });
   }
 
   function delay(ms) {
@@ -355,13 +370,70 @@
 
     if (!invoke) return delay(200).then(function () { return fallback("preview"); });
 
-    return invoke("screen_help", {
-      question: withPersona(question),
-      provider: provider,
-      model: m.id,
-      temperature: 0.4
+    return serverAuth().then(function (auth) {
+      return invoke("screen_help", {
+        question: withPersona(question),
+        provider: provider,
+        model: m.id,
+        temperature: 0.4,
+        authToken: auth.authToken || null,
+        serverUrl: auth.serverUrl || null,
+        serverAnon: auth.serverAnon || null
+      });
     }).then(function (res) {
       return shape({ text: res.text, engine: res.engine });
+    }).catch(function (err) {
+      return fallback(classifyError(err));
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // 6) On-screen step-by-step guidance ("make pointing real"), REACTIVE. Asks the
+  //    engine for the SINGLE next step toward `goal` given the steps already done
+  //    (`history`), based on a fresh photo of the CURRENT screen. The UI calls this
+  //    once per step and loops until `done` — so buttons that appear only after an
+  //    earlier click (Gmail's Send after Forward) are seen when their turn comes.
+  //    Local path only for now, same as runVision. Falls back to an empty step.
+  // ------------------------------------------------------------------
+  function runGuideStep(goal, history) {
+    var provider = config.activeProvider;
+    if (!PROVIDERS[provider]) provider = "gemini";
+    var m = PROVIDERS[provider].large;   // reading a screen is a big task
+    var invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+
+    function shape(res) {
+      return {
+        provider: provider,
+        providerLabel: PROVIDERS[provider].label,
+        tier: "large",
+        model: m.id,
+        modelLabel: m.label,
+        engine: res.engine,
+        reason: res.reason || null,
+        say: res.say || "",
+        point: res.point || "",
+        done: !!res.done
+      };
+    }
+    function fallback(reason) {
+      return shape({ engine: "mock", reason: reason || "offline", say: "", point: "", done: false });
+    }
+
+    if (!invoke) return delay(200).then(function () { return fallback("preview"); });
+
+    return serverAuth().then(function (auth) {
+      return invoke("guide_step", {
+        goal: goal,
+        history: history || [],
+        provider: provider,
+        model: m.id,
+        temperature: 0.15,
+        authToken: auth.authToken || null,
+        serverUrl: auth.serverUrl || null,
+        serverAnon: auth.serverAnon || null
+      });
+    }).then(function (res) {
+      return shape(res);
     }).catch(function (err) {
       return fallback(classifyError(err));
     });
@@ -371,6 +443,7 @@
     route: route,
     run: run,
     runVision: runVision,
+    runGuideStep: runGuideStep,
     config: config,
     providers: PROVIDERS,
     setProvider: function (name) { if (PROVIDERS[name]) config.activeProvider = name; },

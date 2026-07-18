@@ -114,34 +114,70 @@ pub fn list_elements_for(hwnd_val: isize) -> Result<Vec<UiaEl>, String> {
     }
 }
 
-/// Pick the single best element matching `term` (case-insensitive). The browser's
-/// own back/forward/reload buttons sit in the top toolbar strip, while the button
-/// the user actually means (e.g. Gmail's "Forward" inside the open email) sits
-/// lower in the page — so the reliable rule is: take the match LOWEST on screen
-/// (largest y). We first narrow to an EXACT name match ("Forward") when one
-/// exists, so a partial like "Forward message list" can't win over the real
-/// button. (An earlier "prefer any Hyperlink" rule was dropped: it could grab a
-/// stray high-up link regardless of position, which made the FIRST point land on
-/// the browser's toolbar arrow instead of the email's Forward.)
+/// True if `term` appears as a whole word in `name` (both already lowercased) —
+/// i.e. it's one of the alphanumeric tokens of the name. So "bold" matches
+/// "Bold (Ctrl+B)" but "b" does NOT match "Table". This is what stops a
+/// single-letter search from grabbing an unrelated button.
+fn name_has_word(name_lower: &str, term_lower: &str) -> bool {
+    name_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|tok| tok == term_lower)
+}
+
+/// Pick the single best element matching `term` (case-insensitive), in tiers so a
+/// vague search can't grab the wrong control:
+///   1. EXACT name match ("Forward"). Among ties, lowest on screen — the browser's
+///      own back/forward/reload live in the top toolbar while the button the user
+///      means (Gmail's page "Forward") sits lower, so lowest wins.
+///   2. WHOLE-WORD match — the term is one of the words in the name (so "bold"
+///      finds "Bold (Ctrl+B)" but "b" can't find "Table"). Shortest name (closest
+///      to the term) wins, then lowest on screen.
+///   3. SUBSTRING match, but only for terms long enough (>= 3 chars) to be
+///      specific — a 1-2 char substring would match far too much, so we return
+///      None instead and let the UI say "look for X" rather than point wrongly.
+/// (An earlier "prefer any Hyperlink" rule was dropped: it grabbed stray high-up
+/// links, landing the first point on the browser toolbar instead of the target.)
 pub fn pick_target(elements: &[UiaEl], term: &str) -> Option<UiaEl> {
-    let term = term.to_lowercase();
-    let matches: Vec<&UiaEl> = elements
-        .iter()
-        .filter(|e| e.name.to_lowercase().contains(&term))
-        .collect();
-    if matches.is_empty() {
+    let term = term.trim().to_lowercase();
+    if term.is_empty() {
         return None;
     }
 
-    // Prefer elements whose name is EXACTLY the term (ignoring case/whitespace);
-    // fall back to all "contains" matches if there's no exact one.
-    let exact: Vec<&UiaEl> = matches
+    // 1) exact name match, lowest on screen among ties
+    let exact: Vec<&UiaEl> = elements
         .iter()
-        .copied()
         .filter(|e| e.name.trim().to_lowercase() == term)
         .collect();
-    let pool = if exact.is_empty() { &matches } else { &exact };
+    if !exact.is_empty() {
+        return exact.iter().max_by_key(|e| e.y).map(|e| (*e).clone());
+    }
 
-    // Among the pool, the match lowest on screen — avoids the top toolbar nav.
-    pool.iter().max_by_key(|e| e.y).map(|e| (*e).clone())
+    // 2) whole-word match: shortest name first, then lowest on screen
+    let word: Vec<&UiaEl> = elements
+        .iter()
+        .filter(|e| name_has_word(&e.name.to_lowercase(), &term))
+        .collect();
+    if !word.is_empty() {
+        return word
+            .iter()
+            .min_by(|a, b| {
+                let la = a.name.chars().count();
+                let lb = b.name.chars().count();
+                la.cmp(&lb).then(b.y.cmp(&a.y))
+            })
+            .map(|e| (*e).clone());
+    }
+
+    // 3) substring only for reasonably specific terms
+    if term.chars().count() >= 3 {
+        let sub: Vec<&UiaEl> = elements
+            .iter()
+            .filter(|e| e.name.to_lowercase().contains(&term))
+            .collect();
+        if !sub.is_empty() {
+            return sub.iter().max_by_key(|e| e.y).map(|e| (*e).clone());
+        }
+    }
+
+    None
 }
