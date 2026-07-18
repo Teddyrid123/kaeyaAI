@@ -92,20 +92,45 @@
 
   /* ---- radial quick-action menu ---- */
   #ring{ position:absolute; left:50%; top:50%; width:0; height:0; z-index:2; }
-  .sat{ position:absolute; left:0; top:0; width:64px; height:64px; margin:-32px 0 0 -32px;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+
+  /* A soft aurora glow that blooms behind the ring while it's open — makes the
+     whole menu feel like it lights up rather than just popping in. */
+  #stage::before{ content:""; position:absolute; left:50%; top:50%; width:290px; height:290px;
+    margin:-145px 0 0 -145px; border-radius:50%; pointer-events:none; z-index:0;
+    background: radial-gradient(circle, rgba(123,140,255,.30), rgba(126,224,230,.14) 42%, transparent 68%);
+    opacity:0; transform:scale(.35);
+    transition: opacity .4s ease, transform .5s cubic-bezier(.22,1,.36,1); }
+  #stage.open::before{ opacity:1; transform:scale(1); }
+
+  .sat{ position:absolute; left:0; top:0; width:66px; height:66px; margin:-33px 0 0 -33px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
     border:none; border-radius:50%; cursor:pointer; font-family:'Segoe UI', system-ui, sans-serif;
-    color:#243; background:rgba(255,255,255,.92); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
-    box-shadow:0 8px 20px -6px rgba(40,50,120,.45), inset 0 1px 0 rgba(255,255,255,.9);
+    color:#2a2f45; background:linear-gradient(155deg, rgba(255,255,255,.98), rgba(236,240,255,.90));
+    -webkit-backdrop-filter:blur(9px); backdrop-filter:blur(9px);
+    box-shadow:0 12px 26px -8px rgba(40,50,120,.5), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -6px 12px rgba(120,130,220,.12);
     opacity:0; pointer-events:none;
-    transform: rotate(var(--a)) translate(0px) rotate(calc(-1 * var(--a))) scale(.4);
-    transition: transform .24s cubic-bezier(.34,1.5,.6,1), opacity .18s ease, background .15s; }
-  .sat .emo{ font-size:20px; line-height:1; }
-  .sat .lbl{ font-size:9px; font-weight:700; letter-spacing:.01em; }
-  .sat:hover{ background:#fff; color:#0b4bb8; }
-  .sat:active{ transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(.94); }
+    transform: rotate(var(--a)) translate(0px) rotate(calc(-1 * var(--a))) scale(.25);
+    transition: transform .42s cubic-bezier(.34,1.56,.64,1), opacity .26s ease, box-shadow .18s, background .18s, color .18s; }
+  .sat .emo{ font-size:22px; line-height:1; filter:drop-shadow(0 1px 2px rgba(60,60,120,.22)); }
+  .sat .lbl{ font-size:9px; font-weight:700; letter-spacing:.02em; color:#5a6180; }
+
+  /* Open state: fan the satellites out to their radius. */
   #stage.open .sat{ opacity:1; pointer-events:auto;
     transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(1); }
+  /* Staggered bloom — each satellite fans out just after the one before it. */
+  #stage.open .sat:nth-child(1){ transition-delay:.03s; }
+  #stage.open .sat:nth-child(2){ transition-delay:.07s; }
+  #stage.open .sat:nth-child(3){ transition-delay:.11s; }
+  #stage.open .sat:nth-child(4){ transition-delay:.15s; }
+  #stage.open .sat:nth-child(5){ transition-delay:.19s; }
+  #stage.open .sat:nth-child(6){ transition-delay:.23s; }
+
+  /* Hover: lift + colour ring glow (needs the #stage.open specificity to win). */
+  #stage.open .sat:hover{ color:#0b4bb8; background:linear-gradient(155deg,#fff,#eaf0ff);
+    box-shadow:0 16px 30px -8px rgba(40,60,190,.55), 0 0 0 3px rgba(79,107,255,.30), inset 0 1px 0 rgba(255,255,255,.95);
+    transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(1.14); }
+  #stage.open .sat:hover .lbl{ color:#0b4bb8; }
+  #stage.open .sat:active{ transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(1.03); }
 </style>
 </head>
 <body>
@@ -215,7 +240,7 @@
   bot.addEventListener('pointerenter', function(){
     if(drag || menuOpen) return;
     if(openTimer) clearTimeout(openTimer);
-    openTimer = setTimeout(openMenu, 250);
+    openTimer = setTimeout(openMenu, 350);   // deliberate hover so a passing cursor doesn't trigger it
   });
   // Leaving the whole window closes it (moving to a satellite stays inside).
   stage.addEventListener('mouseleave', closeMenu);
