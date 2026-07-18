@@ -1246,6 +1246,73 @@
   }
   listen('konx-quick', quickAction);
 
+  /* ---------- radial menu: hover the orb -> pick a task -> Kaeya writes it in
+     place, streamed sentence by sentence. "Answer" keeps the user's question and
+     writes the answer on a new line after it (append); the rewrites replace the
+     selection. Reuses the quick-mode glow + history. ---------- */
+  // `deep:true` = a real question to answer (route to the big model + ask for a
+  // full, ChatGPT-style answer). The rewrites stay concise and in-place.
+  var RADIAL_ACTIONS = {
+    answer:    { mode:'append',  deep:true,  ins:'Answer this question thoroughly and in depth, the way a knowledgeable assistant like ChatGPT would. Write a clear, well-developed answer of several sentences, using two or three short paragraphs when the question calls for it. Explain the answer, give the important details and reasons, and add a helpful example or bit of context where it makes things clearer. Use plain, everyday language. Do not repeat the question, and do not add any greeting or sign-off.' },
+    improve:   { mode:'replace', ins:'Improve the overall writing' },
+    summarize: { mode:'replace', ins:'Summarize this clearly in a few short sentences' },
+    translate: { mode:'replace', ins:null },   // uses the chosen language
+    explain:   { mode:'append',  deep:true,  ins:'Explain this thoroughly and in depth, the way a helpful assistant like ChatGPT would. Give a clear, well-developed explanation of several sentences, using two or three short paragraphs where it helps. Cover what it means, how it works, and why it matters, with a simple example where useful. Use plain language a beginner can understand. Do not add any greeting or sign-off.' },
+    fix:       { mode:'replace', ins:'Fix the grammar and spelling' }
+  };
+
+  // Break the answer into sentence-sized chunks so Kaeya can paste them one at a
+  // time (the "alive" feel). Paragraph breaks in the model's answer are kept: the
+  // first sentence of a new paragraph carries a leading newline; other sentences
+  // carry a leading space. The very first chunk has no prefix.
+  function splitSentences(text){
+    var raw = (text || '').replace(/\r\n/g, '\n').trim();
+    if(!raw) return [];
+    var paras = raw.split(/\n{2,}|\n/).map(function(p){ return p.replace(/\s+/g,' ').trim(); })
+                   .filter(function(p){ return p; });
+    if(!paras.length) return [];
+    var out = [];
+    paras.forEach(function(para, pi){
+      var parts = para.match(/[^.!?]+[.!?]+["'”’)]*|\S[^.!?]*$/g) || [para];
+      parts.forEach(function(p, si){
+        p = p.trim();
+        if(!p) return;
+        if(out.length === 0) out.push(p);                 // first chunk: no prefix
+        else if(si === 0) out.push('\n' + p);             // new paragraph: newline
+        else out.push(' ' + p);                           // same paragraph: space
+      });
+    });
+    return out.length ? out : [raw];
+  }
+
+  function radialAction(task){
+    if(quickBusy) return;
+    var cfg = RADIAL_ACTIONS[task];
+    if(!cfg) return;
+    quickBusy = true;
+    quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
+    invoke('quick_capture').then(function(raw){
+      var text = (raw || '').trim();
+      if(!text){ orbState('empty'); endQuick(); return; }
+      var ins = cfg.ins || ('Translate this into ' + getSetting('konx-lang','English'));
+      orbState('working');
+      return KonxAI.run(text, ins, { deepThink: !!cfg.deep }).then(function(out){
+        if(histOn()){
+          addHistory({
+            id: 'k' + Date.now() + '-' + Math.floor(Math.random()*1000),
+            ts: Date.now(), instruction: ins, source: text,
+            result: out.text, model: out.modelLabel, tier: out.tier, engine: out.engine
+          });
+        }
+        var chunks = splitSentences(out.text);
+        return invoke('stream_paste', { sentences: chunks, append: cfg.mode === 'append' }).then(function(){
+          orbState(out.engine === 'mock' ? 'demo' : 'done'); endQuick();
+        });
+      });
+    }).catch(function(){ orbState('empty'); endQuick(); });
+  }
+  listen('konx-radial', function(e){ radialAction(e.payload); });
+
   /* ============================================================
      History + Saved — stored locally on THIS PC (no login needed).
      History = every rewrite Kaeya makes. Saved = ones you bookmark.

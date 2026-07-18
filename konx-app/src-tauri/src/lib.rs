@@ -90,6 +90,17 @@ fn send_ctrl(unicode: char) -> Result<(), String> {
     Ok(())
 }
 
+/// Send a single key press (e.g. Right arrow, Enter). Used by streaming to move
+/// the caret to the end of the user's selection and drop to a new line before the
+/// answer, without disturbing the selected text.
+#[cfg(windows)]
+fn send_key(key: enigo::Key) -> Result<(), String> {
+    use enigo::{Direction::Click, Enigo, Keyboard, Settings};
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    enigo.key(key, Click).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn read_clipboard() -> Option<String> {
     let mut cb = arboard::Clipboard::new().ok()?;
     cb.get_text().ok()
@@ -994,6 +1005,62 @@ fn apply_text(app: tauri::AppHandle, state: tauri::State<Target>, text: String) 
     Ok(())
 }
 
+/// Stream an answer into the user's app ONE SENTENCE AT A TIME — the "alive",
+/// ChatGPT-like feel, done the reliable way: we paste whole clean sentences via
+/// the clipboard (not fake per-character keystrokes, which fight Word's
+/// autocorrect/cursor). `append=true` keeps the user's selection (e.g. their
+/// question) and writes the answer on a NEW line after it; `append=false`
+/// replaces the selection with the first sentence (like a normal rewrite). The
+/// JS side pre-formats each chunk (leading space where needed).
+#[tauri::command]
+async fn stream_paste(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Target>,
+    sentences: Vec<String>,
+    append: bool,
+) -> Result<(), String> {
+    // Hide our own window so focus + paste land in the user's app, not Kaeya.
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    let target = *state.0.lock().unwrap();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(windows)]
+        {
+            use enigo::Key;
+            thread::sleep(Duration::from_millis(60));
+            win::set_foreground(target);
+            thread::sleep(Duration::from_millis(120));
+
+            if append {
+                // Collapse the selection to its end (don't overwrite the question),
+                // then start the answer on its own line.
+                let _ = send_key(Key::RightArrow);
+                thread::sleep(Duration::from_millis(30));
+                let _ = send_key(Key::Return);
+                thread::sleep(Duration::from_millis(40));
+            }
+
+            for chunk in &sentences {
+                if write_clipboard(chunk).is_ok() {
+                    let _ = send_ctrl('v');
+                }
+                // The pause is what makes the sentences visibly appear one by one.
+                thread::sleep(Duration::from_millis(430));
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (target, append, &sentences);
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[tauri::command]
 fn hide_main(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -1110,6 +1177,7 @@ pub fn run() {
             open_konx,
             quick_capture,
             apply_text,
+            stream_paste,
             hide_main,
             minimize_main,
             set_orb_visible,

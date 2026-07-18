@@ -8,9 +8,11 @@
   :root{ --pink:#f5a9d0; --violet:#9b8cff; --cyan:#7ee0e6; --gold:#fce9b8; --accent-2:#4f6bff; }
   *{ box-sizing:border-box; }
   html,body{ margin:0; height:100%; background:transparent; overflow:hidden; }
-  body{ display:grid; place-items:center; }
+  /* The window grows to fit the ring while the menu is open; the stage always
+     centres the ball, and the ring is positioned around that centre. */
+  #stage{ position:fixed; inset:0; display:grid; place-items:center; }
 
-  .bot{ width:76px; height:76px; border:none; padding:0; background:none; cursor:pointer;
+  .bot{ position:relative; z-index:3; width:76px; height:76px; border:none; padding:0; background:none; cursor:pointer;
     transition:transform .2s cubic-bezier(.34,1.56,.64,1); -webkit-tap-highlight-color:transparent; }
   .bot:hover{ transform:scale(1.08); }
   .bot:active{ transform:scale(.96); }
@@ -69,7 +71,7 @@
 
   @media (prefers-reduced-motion: reduce){ .orb{ animation:none; } }
 
-  /* ---- quick-mode (double-tap) feedback ---- */
+  /* ---- working / done feedback (the "Kaeya is doing a task" glow) ---- */
   .orb.working{ animation: bob 4s ease-in-out infinite, working 1s ease-in-out infinite; }
   @keyframes working{
     0%,100%{ box-shadow: inset 0 -8px 18px rgba(70,50,140,.35), inset 0 8px 16px rgba(255,255,255,.6), 0 0 0 0 rgba(126,224,230,.55); }
@@ -82,18 +84,44 @@
   }
   .orb.empty{ animation: bob 4s ease-in-out infinite, shake .4s ease; }
   @keyframes shake{ 0%,100%{ transform:translateX(0);} 25%{ transform:translateX(-5px);} 75%{ transform:translateX(5px);} }
-  /* amber flash = the real AI was unavailable (rate limit / no key) -> demo brain */
   .orb.demo{ animation: bob 4s ease-in-out infinite, demoflash .7s ease-out; }
   @keyframes demoflash{
     0%{ box-shadow: inset 0 -8px 18px rgba(70,50,140,.35), inset 0 8px 16px rgba(255,255,255,.6), 0 0 0 0 rgba(224,146,40,.9); }
     100%{ box-shadow: inset 0 -8px 18px rgba(70,50,140,.35), inset 0 8px 16px rgba(255,255,255,.6), 0 0 0 16px rgba(224,146,40,0); }
   }
+
+  /* ---- radial quick-action menu ---- */
+  #ring{ position:absolute; left:50%; top:50%; width:0; height:0; z-index:2; }
+  .sat{ position:absolute; left:0; top:0; width:64px; height:64px; margin:-32px 0 0 -32px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    border:none; border-radius:50%; cursor:pointer; font-family:'Segoe UI', system-ui, sans-serif;
+    color:#243; background:rgba(255,255,255,.92); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+    box-shadow:0 8px 20px -6px rgba(40,50,120,.45), inset 0 1px 0 rgba(255,255,255,.9);
+    opacity:0; pointer-events:none;
+    transform: rotate(var(--a)) translate(0px) rotate(calc(-1 * var(--a))) scale(.4);
+    transition: transform .24s cubic-bezier(.34,1.5,.6,1), opacity .18s ease, background .15s; }
+  .sat .emo{ font-size:20px; line-height:1; }
+  .sat .lbl{ font-size:9px; font-weight:700; letter-spacing:.01em; }
+  .sat:hover{ background:#fff; color:#0b4bb8; }
+  .sat:active{ transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(.94); }
+  #stage.open .sat{ opacity:1; pointer-events:auto;
+    transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(1); }
 </style>
 </head>
 <body>
-  <button class="bot" id="bot" aria-label="Open Kaeya" title="Ask Kaeya">
-    <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
-  </button>
+  <div id="stage">
+    <div id="ring">
+      <button class="sat" data-task="answer"    style="--a:-90deg;  --r:104px;"><span class="emo">&#128172;</span><span class="lbl">Answer</span></button>
+      <button class="sat" data-task="improve"   style="--a:-30deg;  --r:104px;"><span class="emo">&#10024;</span><span class="lbl">Improve</span></button>
+      <button class="sat" data-task="summarize" style="--a:30deg;   --r:104px;"><span class="emo">&#128221;</span><span class="lbl">Summary</span></button>
+      <button class="sat" data-task="translate" style="--a:90deg;   --r:104px;"><span class="emo">&#127760;</span><span class="lbl">Translate</span></button>
+      <button class="sat" data-task="explain"   style="--a:150deg;  --r:104px;"><span class="emo">&#128161;</span><span class="lbl">Explain</span></button>
+      <button class="sat" data-task="fix"        style="--a:210deg;  --r:104px;"><span class="emo">&#10003;</span><span class="lbl">Fix</span></button>
+    </div>
+    <button class="bot" id="bot" aria-label="Open Kaeya" title="Ask Kaeya">
+      <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
+    </button>
+  </div>
 <script>
   var invoke = window.__TAURI__.core.invoke;
   var emit = window.__TAURI__.event.emit;
@@ -111,9 +139,11 @@
   try { applyStyle(localStorage.getItem('konx-style') || 'orb-kaeya'); } catch(e){}
   listen('konx-style', function(e){ applyStyle(e.payload); });
 
-  // Window handle for dragging the orb around the screen.
+  // Window handles for dragging + resizing the orb window.
   var appWindow = window.__TAURI__.window.getCurrentWindow();
   var PhysicalPosition = window.__TAURI__.window.PhysicalPosition;
+  var PhysicalSize = window.__TAURI__.window.PhysicalSize;
+  var currentMonitor = window.__TAURI__.window.currentMonitor;
 
   // Restore the corner the user last dragged the orb to (Rust defaults it to
   // bottom-right; this overrides once the window is ready).
@@ -122,9 +152,10 @@
     if(savedCorner) invoke('place_orb_corner', { corner: savedCorner });
   } catch(e){}
 
+  var stage = document.getElementById('stage');
   var orbEl = document.querySelector('.orb');
   var stateTimer = null;
-  // The (hidden) main window drives quick mode and reports back here so the
+  // The (hidden) main window drives quick actions and reports back here so the
   // orb can show it's working / done, since no window opens.
   listen('konx-quick-state', function(e){
     var s = e.payload;
@@ -137,8 +168,69 @@
     }
   });
 
-  // Interaction: TAP = open, DOUBLE-TAP = quick action, DRAG = move to a corner.
+  // ---------- radial menu: hover the ball -> tasks fan out ----------
+  var OPEN = 300;            // window size (logical px) while the ring is open
+  var menuOpen = false, openTimer = null, savedGeom = null;
+
+  function openMenu(){
+    if(menuOpen || drag) return;
+    menuOpen = true;
+    Promise.all([appWindow.outerPosition(), appWindow.outerSize(), currentMonitor()])
+      .then(function(res){
+        var pos = res[0], size = res[1], mon = res[2];
+        savedGeom = { x: pos.x, y: pos.y, w: size.width, h: size.height };
+        var dpr = window.devicePixelRatio || 1;
+        var openPx = Math.round(OPEN * dpr);
+        // keep the ball centred where it is now, then clamp fully on-screen
+        var cx = pos.x + size.width / 2, cy = pos.y + size.height / 2;
+        var nx = Math.round(cx - openPx / 2), ny = Math.round(cy - openPx / 2);
+        if(mon){
+          var mp = mon.position, ms = mon.size;
+          nx = Math.max(mp.x, Math.min(nx, mp.x + ms.width - openPx));
+          ny = Math.max(mp.y, Math.min(ny, mp.y + ms.height - openPx));
+        }
+        return appWindow.setSize(new PhysicalSize(openPx, openPx)).then(function(){
+          return appWindow.setPosition(new PhysicalPosition(nx, ny));
+        });
+      })
+      .then(function(){ if(menuOpen) stage.classList.add('open'); })
+      .catch(function(){ menuOpen = false; });
+  }
+
+  function closeMenu(){
+    if(openTimer){ clearTimeout(openTimer); openTimer = null; }
+    if(!menuOpen) return;
+    menuOpen = false;
+    stage.classList.remove('open');
+    if(savedGeom){
+      var g = savedGeom; savedGeom = null;
+      appWindow.setSize(new PhysicalSize(g.w, g.h)).then(function(){
+        return appWindow.setPosition(new PhysicalPosition(g.x, g.y));
+      }).catch(function(){});
+    }
+  }
+
+  // Open on a short, deliberate hover so a quick press-to-drag/tap wins the race.
   var bot = document.getElementById('bot');
+  bot.addEventListener('pointerenter', function(){
+    if(drag || menuOpen) return;
+    if(openTimer) clearTimeout(openTimer);
+    openTimer = setTimeout(openMenu, 250);
+  });
+  // Leaving the whole window closes it (moving to a satellite stays inside).
+  stage.addEventListener('mouseleave', closeMenu);
+
+  // Click a satellite -> run that task in place, then tuck the menu away.
+  Array.prototype.forEach.call(document.querySelectorAll('.sat'), function(s){
+    s.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var task = s.getAttribute('data-task');
+      closeMenu();
+      emit('konx-radial', task);
+    });
+  });
+
+  // ---------- tap = open, double-tap = quick default, drag = move ----------
   var tapTimer = null;
   var drag = null;            // active drag state, or null
   var suppressClick = false;  // true right after a drag, so it isn't also a "tap"
@@ -146,10 +238,11 @@
 
   bot.addEventListener('pointerdown', function(e){
     if(e.button !== 0) return;
+    if(openTimer){ clearTimeout(openTimer); openTimer = null; }  // pressing cancels a pending open
+    if(menuOpen){ closeMenu(); suppressClick = true; return; }   // pressing while open just dismisses
     suppressClick = false;
     drag = { sx:e.screenX, sy:e.screenY, wx:0, wy:0, ready:false, moved:false };
     try { bot.setPointerCapture(e.pointerId); } catch(_){}
-    // Grab the window's current top-left so moves are relative to it.
     appWindow.outerPosition().then(function(p){
       if(drag){ drag.wx = p.x; drag.wy = p.y; drag.ready = true; }
     }).catch(function(){ drag = null; });
@@ -160,7 +253,7 @@
     var dx = e.screenX - drag.sx, dy = e.screenY - drag.sy;
     if(!drag.moved && (Math.abs(dx) + Math.abs(dy)) < DRAG_THRESH) return;
     drag.moved = true;
-    var dpr = window.devicePixelRatio || 1;   // screen coords are logical; window pos is physical
+    var dpr = window.devicePixelRatio || 1;
     appWindow.setPosition(new PhysicalPosition(
       Math.round(drag.wx + dx * dpr),
       Math.round(drag.wy + dy * dpr)
@@ -173,8 +266,8 @@
     try { bot.releasePointerCapture(e.pointerId); } catch(_){}
     drag = null;
     if(moved){
-      suppressClick = true;   // the click that follows this pointerup is not a tap
-      invoke('snap_orb').then(function(corner){   // snap to nearest corner, remember it
+      suppressClick = true;
+      invoke('snap_orb').then(function(corner){
         try { localStorage.setItem('kaeya-orb-corner', corner); } catch(_){}
       }).catch(function(){});
     }
@@ -183,7 +276,7 @@
   bot.addEventListener('pointercancel', endDrag);
 
   bot.addEventListener('click', function(){
-    if(suppressClick){ suppressClick = false; return; }   // this "click" ended a drag
+    if(suppressClick){ suppressClick = false; return; }   // this "click" ended a drag / dismissed the menu
     if(tapTimer){                    // this is the 2nd click -> double tap
       clearTimeout(tapTimer); tapTimer = null;
       emit('konx-quick');            // main captures + rewrites + replaces, no window

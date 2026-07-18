@@ -93,57 +93,61 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   passed: signed-in users hit the Supabase `ai` proxy instead of falling to the demo brain; see
   "Server-first vision" below); (b) v1.1 proactive nudges; (c) capture the monitor the
   target app is on (v1.0 grabs the primary monitor).
-- **On-screen pointing — CORE MECHANIC DONE & VERIFIED LIVE (2026-07-17).** Kaeya can now draw a
-  green box + red arrow ("Kaeya: click here") on the REAL on-screen button, using Windows
-  UIAutomation for the exact spot instead of the AI guessing pixels. Joseph confirmed it points at
-  Gmail's real email Forward button reliably, every attempt incl. the first. Pieces:
-  `src-tauri/src/uia.rs` (UIAutomation via the `windows` crate: `list_elements_for(hwnd)` reads
-  named elements + exact rects; `pick_target(els, term)` picks the match), Rust commands
-  `list_elements` / `point_at(name, label)` / `take_pending_point` / `clear_point`, and a third
-  transparent, click-through, always-on-top **`overlay`** window drawn by `src/overlay.html`
-  (HTML canvas). Two gotchas fixed: (1) the `overlay` window MUST be in `capabilities/default.json`
-  `windows` — without it the overlay gets zero permissions, can't receive the `kaeya-point` event,
-  and shows a blank/tinted full screen with no arrow; (2) `pick_target` disambiguation: dropped the
-  old "prefer any Hyperlink first" rule (grabbed a stray link → first point hit the browser toolbar
-  arrow); now = exact-name match, then LOWEST on screen (page button sits below the browser's top
-  toolbar nav). Also added `overlay` to the foreground-tracker exclude list.
-  **Triggered today only by TEMPORARY dev-test buttons** in `index.html` (`data-pointtest`,
-  `data-testuia`). NOT yet wired to real AI guidance. **Next (Joseph chose 2026-07-17): "make
-  pointing real"** — feed the UIAutomation name list to the AI so it picks WHICH element to point
-  at from a real question, guide one step at a time, then remove the dev-test buttons.
-- **"Make pointing real" — DONE & VERIFIED LIVE 2026-07-18 (incl. full multi-step).** Pointing is wired
-  to real AI guidance, one step at a time; dev-test buttons removed. The engine is **reactive**: the
-  `guide_step` command takes the user's `goal` + the `history` of steps already done, takes a FRESH
-  screenshot + on-screen element list each call, and returns the SINGLE next step `{say, point, done}`
-  (`STEP_PROMPT`, `parse_next`). The frontend (`KonxAI.runGuideStep` → `fetchGuideStep`/`showGuideStep`
-  loop, Next/Stop, `GUIDE_MAX_STEPS=12`) draws the arrow via `point_at(name, 60)` and re-fetches against
-  the live screen on each Next — so buttons that only appear after a click are seen in turn. Joseph ran
-  "how do I forward this email to someone and send it?" and the green arrow landed on **every** step
-  (Forward → To box → Send), ending only after Send. Bugs fixed along the way: (1) the model copied the
-  whole "Forward [Button]" list line into `point` → `clean_target_name` strips the trailing "[Type]";
-  (2) an upfront all-steps planner could only see the first screen → replaced with the reactive
-  `guide_step`; (3) typing steps returned an empty `point` and the Send step prematurely set `done=true`
-  → STEP_PROMPT now points at typing fields and treats a remaining Send as a real step, plus the element
-  list cap was raised 60→120 so compose fields are always included. Result messaging is honest (green
-  "arrow is on X" only when `point_at` actually found it; amber "look for X" otherwise). New Rust
-  command **`guide_plan`** (`lib.rs`): hides `main` → captures the screen (`capture_screen_jpeg`) +
-  reads the real clickable element NAMES (`onscreen_element_lines` filters UIAutomation to Button/
-  Hyperlink/MenuItem/Edit/TabItem/CheckBox/ComboBox/ListItem, dedupes, caps 60) → sends photo + name
-  list to the vision model with a new **`PLAN_PROMPT`** that returns strict JSON
-  `{steps:[{say, point}]}`, where `point` is a name copied verbatim from the list; `parse_plan`
-  tolerantly extracts the outermost `{..}`. Same transient-overload small-model retry as `screen_help`;
-  local key only. `call_gemini_vision`/`call_openai_vision` were refactored to take a `system` param so
-  both `VISION_PROMPT` and `PLAN_PROMPT` reuse them. `point_at` now takes an optional `seconds` (the
-  guide passes 60 so the arrow holds while a slow user reads; default 8). Frontend: `KonxAI.runGuidePlan`
-  (`konx-ai.js`) mirrors `runVision`; the Contextual Guidance tab now has ONE **"Guide me step by step"**
-  button (`data-guide`) that opens a small choice — **👉 On-screen** (the step-walker: `runGuide` →
-  `showGuideStep`, "Step X of N", `point_at(name, 60)` per step, Back/Next, "You're all set 🎉" + 
-  `clear_point` at the end) vs **📄 Text list** (the existing `runScreenHelp`). Empty plan → gracefully
-  offers the text list. Re-pointing each step works because `point_at` re-reads elements LIVE, so a step
-  for a button that only appears after an earlier click (Gmail Send after Forward) still lands. **Still
-  TODO after the live test:** field-test on a real low-literacy user; server-side vision path (DONE
-  2026-07-18 — see "Server-first vision"); capture
-  the monitor the target app is on (v1.0 grabs the primary).
+- **On-screen pointing — CORE MECHANIC DONE & VERIFIED LIVE (2026-07-17).** Kaeya draws a green box +
+  red arrow ("Kaeya: click here") on the REAL on-screen button, using Windows UIAutomation for the exact
+  spot instead of the AI guessing pixels. Pieces: `src-tauri/src/uia.rs` (`list_elements_for(hwnd)` reads
+  named elements + exact rects; `pick_target(els, term)` picks the match — now TIERED: exact name →
+  whole-word token match → substring only for terms ≥3 chars, so a vague search like "B" can't grab the
+  wrong control; `clean_target_name` strips a trailing " [Type]" the model sometimes copies); Rust
+  commands `list_elements` / `point_at(name, seconds?)` / `take_pending_point` / `clear_point`; and a
+  third transparent, click-through, always-on-top **`overlay`** window drawn by `src/overlay.html` (HTML
+  canvas). Gotchas fixed earlier: the `overlay` window MUST be listed in `capabilities/default.json`
+  `windows` (else zero permissions → can't receive the `kaeya-point` event → blank tinted screen, no
+  arrow), and `overlay` must be in the foreground-tracker exclude list so the arrow layer isn't mistaken
+  for the target app.
+- **"Make pointing real" — DONE & VERIFIED LIVE 2026-07-18 (full multi-step, general across apps).**
+  Pointing is wired to real AI guidance, one step at a time; the old dev-test buttons are gone. The engine
+  is **reactive**: the `guide_step` command (`lib.rs`) takes the user's `goal` + the `history` of steps
+  already done, takes a FRESH screenshot + on-screen element-name list each call (`onscreen_element_lines`
+  filters UIAutomation to Button/Hyperlink/MenuItem/Edit/TabItem/CheckBox/ComboBox/ListItem, dedupes, caps
+  120), and returns the SINGLE next step `{say, point, done}` via **`STEP_PROMPT`** + `parse_next`. The
+  frontend (`KonxAI.runGuideStep` → `fetchGuideStep`/`showGuideStep` loop, Next/Stop, `GUIDE_MAX_STEPS=12`)
+  draws the arrow via `point_at(name, 60)` (the 60s hold lets a slow user read) and re-fetches against the
+  LIVE screen on each Next — so buttons that only appear after an earlier click (Gmail's Send after
+  Forward) are seen when their turn comes. The Contextual Guidance tab has ONE **"Guide me step by step"**
+  button (`data-guide`) → a small choice: **👉 On-screen** (the step walker) vs **📄 Text list** (the
+  existing `screen_help` / `runScreenHelp`). Messaging is honest: "the green arrow is on X" only when
+  `point_at` actually found it, amber "look for X and click it" otherwise. `call_gemini_vision` /
+  `call_openai_vision` take a `system` param so `VISION_PROMPT` (screen helper) and `STEP_PROMPT` (guide)
+  share them. Verified live: "how do I forward this email to someone and send it?" pointed correctly on
+  EVERY step (Forward → To box → Send), ending only after Send; ~90% across a variety of tasks/apps. The
+  one weak spot found — single-letter Word toolbar buttons (Bold shows "B", Underline "U") — is fixed by
+  the tiered `pick_target` + a `STEP_PROMPT` rule to use the control's real Name from the list, never the
+  letter drawn on it. **Server-first vision — DONE & VERIFIED LIVE 2026-07-18:** the screen helper + guide
+  now route through the Supabase `ai` proxy when signed in, so a signed-in user with no local key gets real
+  help instead of the demo brain (keyless test passed) — see "Server-first vision" and "Backend (LIVE)".
+  **Still TODO:** field-test on a real low-literacy user; capture the monitor the target app is on (v1.0
+  grabs the primary); v1.1 proactive nudges.
+- **Radial quick-actions around the orb — DONE & VERIFIED LIVE (2026-07-18).** Hover the floating ball and
+  a ring of 6 satellite buttons fans out — **Answer / Improve / Summary / Translate / Explain / Fix** — so
+  the user gets AI help written straight into whatever app they're in (e.g. MS Word) with almost no clicks.
+  Pieces: `orb.html` — the radial ring (buttons at `--a` angle / `--r=104px`), opens on a ~250ms deliberate
+  hover (so a quick press still taps/drags — tap/double-tap/drag all preserved; pressing while open just
+  dismisses); the orb window grows to `OPEN=300` logical px and re-centres/clamps on-screen while open,
+  shrinks back on mouse-leave (needs the new `set-size`/`outer-size`/`current-monitor` perms in
+  `capabilities/default.json`). Satellite click → `emit('konx-radial', task)`. `index.html`:
+  `radialAction(task)` → `quick_capture` → `KonxAI.run` (server-first; reuses the orb glow + history) →
+  `splitSentences` → `stream_paste`. New Rust **`stream_paste(sentences, append)`** + `send_key` focuses
+  the target app once and pastes each sentence chunk via clipboard+Ctrl+V with a ~430ms pause — the
+  ChatGPT-like "alive" feel, done reliably (NOT per-char keystrokes, which fight Word's autocorrect).
+  `append=true` (**Answer/Explain**) keeps the user's selection + writes the answer on a new line after it;
+  `append=false` (the rewrites) replaces the selection. **Depth fix (same day, after 1st test):** Answer/
+  Explain first came back as ONE terse sentence — now they carry `deep:true` so `radialAction` routes them
+  to the LARGE model (`{deepThink:true}`) AND their instruction asks for a thorough, multi-paragraph,
+  ChatGPT-style answer (reasons + an example, plain language); `splitSentences` is paragraph-aware (keeps
+  blank-line breaks). The rewrites (Improve/Summary/Translate/Fix) deliberately STAY concise/in-place.
+  Verified live in Word: full 3-paragraph answer on "how elections are held in Liberia" streamed in
+  cleanly. Note: Answer/Explain always use the bigger model (slightly more cost/use; fine on free Gemini).
 
 ## Repo layout
 ```
