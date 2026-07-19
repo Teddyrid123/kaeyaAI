@@ -1042,12 +1042,25 @@ async fn stream_paste(
                 thread::sleep(Duration::from_millis(40));
             }
 
+            // The pause makes the chunks visibly appear one by one (the "alive"
+            // feel). SHORT answer -> deliberate 430ms drip. LONG answer (a
+            // document, pasted a paragraph-block at a time) -> scale down so it
+            // lands in a few seconds, but never below ~200ms: pasting too fast
+            // races Word's clipboard and drops/duplicates lines.
+            let n = sentences.len();
+            let pause_ms: u64 = if n <= 12 {
+                430
+            } else {
+                (430 * 12 / n as u64).clamp(200, 430)
+            };
             for chunk in &sentences {
                 if write_clipboard(chunk).is_ok() {
+                    // Let the clipboard settle before pasting so Word reads the
+                    // NEW chunk, not the previous one (prevents duplicate pastes).
+                    thread::sleep(Duration::from_millis(45));
                     let _ = send_ctrl('v');
                 }
-                // The pause is what makes the sentences visibly appear one by one.
-                thread::sleep(Duration::from_millis(430));
+                thread::sleep(Duration::from_millis(pause_ms));
             }
         }
         #[cfg(not(windows))]

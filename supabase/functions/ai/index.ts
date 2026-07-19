@@ -25,6 +25,43 @@ const SYSTEM_PROMPT =
   "labels, or sign-off, and do NOT wrap the result in quotation marks. If the text " +
   "is already correct for the instruction, return it unchanged.";
 
+// The "answer/generate" brain (radial Answer + Explain). Unlike SYSTEM_PROMPT
+// this does NOT rewrite a selection — it fulfills a request and writes fresh
+// content into the user's document. The shape + length are the USER's to
+// decide: a list when they ask for a list, a short answer when that's all it
+// needs, a full multi-page document when they ask for one. Never artificially
+// shorten or pad.
+const GENERATE_SYSTEM_PROMPT =
+  "You are Kaeya, a helpful assistant that writes content directly into the user's " +
+  "document (usually Microsoft Word). Fulfill the user's request as fully as it needs, " +
+  "and in EXACTLY the format they ask for: if they ask for a list, give a list; if they " +
+  "ask for a full or multi-page document, write it in full; otherwise answer normally. " +
+  "\n\nFORMAT RULES (important — the text goes straight into Word, which does NOT " +
+  "understand Markdown):\n" +
+  "- Write PLAIN text only. Do NOT use any Markdown symbols: no #, no *, no **, no " +
+  "underscores for emphasis, no backticks, and no --- divider lines.\n" +
+  "- For a heading, just write it on its own line in Title Case (e.g. 'Personal " +
+  "Finance'), with a blank line after it. Number sections as '1. Personal Finance' if " +
+  "sections help.\n" +
+  "- For a list, put each item on its own line starting with '• ' (a bullet and a " +
+  "space). Do not start lines with * or -.\n" +
+  "- Separate paragraphs with a single blank line.\n\n" +
+  "QUALITY RULES:\n" +
+  "- Never repeat yourself. Each section, heading, and bullet must appear ONCE and say " +
+  "something new. Do not restate the same point.\n" +
+  "- Cover the topic in a logical order and finish what you start — do not skip a " +
+  "promised section or cut one short.\n" +
+  "- Always answer in complete sentences. Even for a one-fact question, reply with a " +
+  "full sentence and a little helpful context (e.g. 'The capital of Liberia is " +
+  "Monrovia, which is also its largest city.'), never a single bare word.\n" +
+  "- Use plain, clear language a beginner can understand.\n\n" +
+  "Reply with ONLY the content itself — no greeting, no preamble, no \"Here is…\", no " +
+  "sign-off, and no surrounding quotation marks.";
+
+// Give a generated answer room to be long (a real multi-page document). The
+// small rewrite path relies on the model default, which is plenty for a rewrite.
+const GENERATE_MAX_TOKENS = 8192;
+
 // How many requests each plan gets per day (text + vision share the same meter).
 const DAILY_LIMIT: Record<string, number> = { free: 40, pro: 5000, team: 5000 };
 
@@ -47,7 +84,9 @@ function isTransient(status: number, message: string): boolean {
 type ModelResult = { ok: true; out: string } | { ok: false; status: number; message: string };
 
 // ---- text ----
-async function callGeminiText(key: string, model: string, system: string, userMsg: string, temperature: number): Promise<ModelResult> {
+async function callGeminiText(key: string, model: string, system: string, userMsg: string, temperature: number, maxTokens?: number): Promise<ModelResult> {
+  const generationConfig: Record<string, unknown> = { temperature };
+  if (maxTokens) generationConfig.maxOutputTokens = maxTokens;
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
     {
@@ -56,7 +95,7 @@ async function callGeminiText(key: string, model: string, system: string, userMs
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ parts: [{ text: userMsg }] }],
-        generationConfig: { temperature },
+        generationConfig,
       }),
     },
   );
@@ -65,18 +104,20 @@ async function callGeminiText(key: string, model: string, system: string, userMs
   return { ok: true, out: (v?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim() };
 }
 
-async function callOpenAIText(key: string, model: string, system: string, userMsg: string, temperature: number): Promise<ModelResult> {
+async function callOpenAIText(key: string, model: string, system: string, userMsg: string, temperature: number, maxTokens?: number): Promise<ModelResult> {
+  const body: Record<string, unknown> = {
+    model,
+    temperature,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userMsg },
+    ],
+  };
+  if (maxTokens) body.max_tokens = maxTokens;
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      temperature,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userMsg },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
   const v = await r.json().catch(() => ({}));
   if (!r.ok) return { ok: false, status: r.status, message: v?.error?.message ?? "OpenAI error" };
@@ -169,6 +210,17 @@ Deno.serve(async (req) => {
     model = String(payload.model || MODELS[provider][tier]);
     const call = provider === "openai" ? callOpenAIVision : callGeminiVision;
     run = (key, m) => call(key, m, system, prompt, image, temperature);
+  } else if (payload.mode === "generate") {
+    // ANSWER / EXPLAIN: fulfill the user's request as fresh content (not a
+    // rewrite). `text` IS the request; the user's own words drive the shape and
+    // length. Reading/writing a full answer is a big task -> large tier.
+    const request = String(payload.text ?? "");
+    if (!request.trim()) return json({ error: "empty", message: "No request" }, 400);
+    tier = payload.tier === "small" ? "small" : "large";
+    temperature = typeof payload.temperature === "number" ? payload.temperature : 0.55;
+    model = String(payload.model || MODELS[provider][tier]);
+    const call = provider === "openai" ? callOpenAIText : callGeminiText;
+    run = (key, m) => call(key, m, GENERATE_SYSTEM_PROMPT, request, temperature, GENERATE_MAX_TOKENS);
   } else {
     const text = String(payload.text ?? "");
     const instruction = String(payload.instruction ?? "");

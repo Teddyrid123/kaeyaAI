@@ -148,6 +148,32 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   blank-line breaks). The rewrites (Improve/Summary/Translate/Fix) deliberately STAY concise/in-place.
   Verified live in Word: full 3-paragraph answer on "how elections are held in Liberia" streamed in
   cleanly. Note: Answer/Explain always use the bigger model (slightly more cost/use; fine on free Gemini).
+- **Answer freedom — the user's request drives shape + length — DONE & VERIFIED LIVE (2026-07-19).** The
+  2026-07-18 depth fix over-corrected: `RADIAL_ACTIONS.answer.ins` hard-coded "two or three short
+  paragraphs", so **Answer** ignored "give me a list" / a request for a full document. Root cause was that
+  fixed format instruction, NOT a length cap (there is NONE in code). Fixes: (1) **new server "generate"
+  mode** (`functions/ai/index.ts`): `POST {mode:"generate", text=the request}` → dedicated
+  `GENERATE_SYSTEM_PROMPT` (answer/create, not rewrite; user's words drive format+length; plain
+  Word-friendly text, NO markdown; no repetition/don't skip sections; ALWAYS full sentences even for a
+  one-fact question) + `GENERATE_MAX_TOKENS=8192`; `callGeminiText`/`callOpenAIText` gained an optional
+  `maxTokens`. Metering unchanged (per-request, free=40/day — long answers don't cost more). (2)
+  **frontend routes Answer/Explain through generate**: `konx-ai.js` `run(text, ins, {generate:true})` →
+  `callServer` sends `mode:"generate"` (skips the `Instruction:/Text:` wrapper; forces large tier; skips
+  the same-text re-improve retry). `index.html` `RADIAL_ACTIONS` answer/explain are `gen:true` with a
+  `req(t)` builder (answer = the question as-is; explain = "Explain the following…: <selection>"); the
+  "2–3 paragraphs" wording is gone (`ins` is now only the offline/local-key fallback). (3) **`stripMarkdown`**
+  (`index.html`) removes leftover `#`/`*`/`**`/`---`/backticks and turns bullets into "• " (Word can't
+  render markdown) — applied to generate results only. (4) **long-doc paste feel**: `splitSentences` pastes
+  a whole PARAGRAPH BLOCK at a time for long answers (short answers still drip sentence-by-sentence), blocks
+  separated by a SINGLE `\n` (Word's own paragraph spacing gives the gap); Rust `stream_paste` adds a ~45ms
+  clipboard-settle before each Ctrl+V and scales the inter-chunk pause from 430ms down to a **200ms floor**
+  (faster raced Word → dropped/duplicated lines). Verified live: list → a list; two-page overview complete
+  (no repeats/skips) and smooth; short question → a full sentence. **Bold headings — ATTEMPTED then ROLLED
+  BACK per Joseph (2026-07-19):** keyboard bold-toggle (Ctrl+B) is unreliable — the "off" fires while Word
+  is busy right after a paste and gets dropped → whole doc bold; a "flip bold BEFORE each paste while idle"
+  version was built too, but Joseph chose to keep the clean plain-text output. All bold code reverted (no
+  `bolds` param on `stream_paste`, no `isHeading`); generate mode + `stripMarkdown` + block-paste KEPT. If
+  revisited, use a rich-text (RTF/HTML) clipboard, NOT keyboard toggles.
 
 ## Repo layout
 ```

@@ -1252,34 +1252,85 @@
      selection. Reuses the quick-mode glow + history. ---------- */
   // `deep:true` = a real question to answer (route to the big model + ask for a
   // full, ChatGPT-style answer). The rewrites stay concise and in-place.
+  // `gen:true` = ANSWER a request (route to the answer brain; the user's own
+  // words drive the shape + length — list, short, or full multi-page document).
+  // `req(t)` builds the request sent to the model from the captured text. `ins`
+  // is only the offline/local fallback instruction. The rewrites (no gen) stay
+  // concise and in-place.
   var RADIAL_ACTIONS = {
-    answer:    { mode:'append',  deep:true,  ins:'Answer this question thoroughly and in depth, the way a knowledgeable assistant like ChatGPT would. Write a clear, well-developed answer of several sentences, using two or three short paragraphs when the question calls for it. Explain the answer, give the important details and reasons, and add a helpful example or bit of context where it makes things clearer. Use plain, everyday language. Do not repeat the question, and do not add any greeting or sign-off.' },
+    answer:    { mode:'append',  deep:true, gen:true,
+                 req: function(t){ return t; },
+                 ins:'Answer the following request fully, in exactly the format asked (a list if they ask for a list, short if that is all it needs, a full document if they ask for one). Reply with only the answer, no greeting or sign-off.' },
     improve:   { mode:'replace', ins:'Improve the overall writing' },
     summarize: { mode:'replace', ins:'Summarize this clearly in a few short sentences' },
     translate: { mode:'replace', ins:null },   // uses the chosen language
-    explain:   { mode:'append',  deep:true,  ins:'Explain this thoroughly and in depth, the way a helpful assistant like ChatGPT would. Give a clear, well-developed explanation of several sentences, using two or three short paragraphs where it helps. Cover what it means, how it works, and why it matters, with a simple example where useful. Use plain language a beginner can understand. Do not add any greeting or sign-off.' },
+    explain:   { mode:'append',  deep:true, gen:true,
+                 req: function(t){ return 'Explain the following clearly and as fully as it needs, in whatever format best fits. Use plain language a beginner can understand:\n\n' + t; },
+                 ins:'Explain the following clearly and as fully as it needs, in plain language. Reply with only the explanation, no greeting or sign-off.' },
     fix:       { mode:'replace', ins:'Fix the grammar and spelling' }
   };
 
-  // Break the answer into sentence-sized chunks so Kaeya can paste them one at a
-  // time (the "alive" feel). Paragraph breaks in the model's answer are kept: the
-  // first sentence of a new paragraph carries a leading newline; other sentences
-  // carry a leading space. The very first chunk has no prefix.
-  function splitSentences(text){
-    var raw = (text || '').replace(/\r\n/g, '\n').trim();
-    if(!raw) return [];
-    var paras = raw.split(/\n{2,}|\n/).map(function(p){ return p.replace(/\s+/g,' ').trim(); })
-                   .filter(function(p){ return p; });
-    if(!paras.length) return [];
+  // Kaeya pastes into Word, which does NOT render Markdown — so strip any Markdown
+  // symbols the model slipped in (#, *, **, ---, backticks) and turn its bullets
+  // into plain "• " lines. Belt-and-suspenders with the server's format rules.
+  function stripMarkdown(t){
+    if(!t) return t;
+    var lines = ('' + t).replace(/\r\n/g, '\n').split('\n');
     var out = [];
-    paras.forEach(function(para, pi){
-      var parts = para.match(/[^.!?]+[.!?]+["'”’)]*|\S[^.!?]*$/g) || [para];
-      parts.forEach(function(p, si){
-        p = p.trim();
-        if(!p) return;
-        if(out.length === 0) out.push(p);                 // first chunk: no prefix
-        else if(si === 0) out.push('\n' + p);             // new paragraph: newline
-        else out.push(' ' + p);                           // same paragraph: space
+    lines.forEach(function(ln){
+      var s = ln;
+      if(/^\s*([-*_=])\1{2,}\s*$/.test(s)){ out.push(''); return; }   // divider -> blank
+      s = s.replace(/^\s{0,3}#{1,6}\s*/, '');                          // heading marks
+      s = s.replace(/^(\s*)[*+\-]\s+/, '$1• ');                        // bullet -> •
+      s = s.replace(/\*\*([^*]+)\*\*/g, '$1');                         // **bold**
+      s = s.replace(/__([^_]+)__/g, '$1');                             // __bold__
+      s = s.replace(/\*([^*]+)\*/g, '$1');                             // *italic*
+      s = s.replace(/`([^`]*)`/g, '$1');                               // `code`
+      s = s.replace(/\*/g, '');                                        // stray *
+      out.push(s);
+    });
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  // Break the answer into chunks Kaeya pastes one at a time (the "alive" feel),
+  // keeping structure: blank lines between paragraphs, single breaks between list
+  // items, spaces between sentences. SHORT answer -> drip sentence by sentence
+  // (feels alive). LONG answer (a document) -> paste a whole PARAGRAPH BLOCK at a
+  // time: fewer, bigger clipboard writes = fast AND reliable (no dropped/duplicate
+  // lines from pasting too quickly).
+  // Break the answer into chunks Kaeya pastes one at a time, keeping structure:
+  // single line break between blocks, spaces between sentences. SHORT answer ->
+  // drip sentence by sentence (feels alive). LONG answer (a document) -> paste a
+  // whole paragraph BLOCK at a time: fewer, bigger clipboard writes = fast AND
+  // reliable (no dropped/duplicate lines).
+  function splitSentences(text){
+    var raw = (text || '').replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
+    if(!raw) return [];
+    var blocks = raw.split(/\n{2,}/).map(function(b){ return b.replace(/[ \t]+$/gm,'').trim(); })
+                    .filter(function(b){ return b; });
+    if(!blocks.length) return [];
+    var longAnswer = raw.length > 600 || blocks.length > 6;
+    var out = [];
+    function push(prefix, s){ out.push(out.length === 0 ? s : prefix + s); }
+    blocks.forEach(function(block, bi){
+      // A single line break between blocks (not a blank line). Word adds its own
+      // "space after paragraph", so one break is enough — a blank line looks like
+      // a double gap.
+      var blockPrefix = (bi === 0) ? '' : '\n';
+      if(longAnswer){
+        push(blockPrefix, block);   // one chunk per paragraph block
+        return;
+      }
+      var lines = block.split(/\n/).map(function(l){ return l.replace(/\s+/g,' ').trim(); })
+                        .filter(function(l){ return l; });
+      lines.forEach(function(line, li){
+        var parts = line.match(/[^.!?]+[.!?]+["'”’)]*|\S[^.!?]*$/g) || [line];
+        parts.forEach(function(p, si){
+          p = p.trim();
+          if(!p) return;
+          var pref = (li === 0 && si === 0) ? blockPrefix : (si === 0 ? '\n' : ' ');
+          push(pref, p);
+        });
       });
     });
     return out.length ? out : [raw];
@@ -1295,16 +1346,22 @@
       var text = (raw || '').trim();
       if(!text){ orbState('empty'); endQuick(); return; }
       var ins = cfg.ins || ('Translate this into ' + getSetting('konx-lang','English'));
+      // In generate mode the composed request is what the model answers; the
+      // rewrites just send the captured selection.
+      var payloadText = (cfg.gen && cfg.req) ? cfg.req(text) : text;
       orbState('working');
-      return KonxAI.run(text, ins, { deepThink: !!cfg.deep }).then(function(out){
+      return KonxAI.run(payloadText, ins, { deepThink: !!cfg.deep, generate: !!cfg.gen }).then(function(out){
+        // Answers/explanations are written into Word: clean out any Markdown
+        // symbols. Rewrites are left exactly as the model returned them.
+        var finalText = cfg.gen ? stripMarkdown(out.text) : out.text;
         if(histOn()){
           addHistory({
             id: 'k' + Date.now() + '-' + Math.floor(Math.random()*1000),
             ts: Date.now(), instruction: ins, source: text,
-            result: out.text, model: out.modelLabel, tier: out.tier, engine: out.engine
+            result: finalText, model: out.modelLabel, tier: out.tier, engine: out.engine
           });
         }
-        var chunks = splitSentences(out.text);
+        var chunks = splitSentences(finalText);
         return invoke('stream_paste', { sentences: chunks, append: cfg.mode === 'append' }).then(function(){
           orbState(out.engine === 'mock' ? 'demo' : 'done'); endQuick();
         });

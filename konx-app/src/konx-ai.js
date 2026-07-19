@@ -70,7 +70,7 @@
   // ------------------------------------------------------------------
   function classify(text, instruction, opts) {
     opts = opts || {};
-    if (opts.deepThink) return "large";
+    if (opts.deepThink || opts.generate) return "large";
 
     var t = text || "";
     var ins = (instruction || "").toLowerCase();
@@ -157,12 +157,32 @@
   //     usage per plan. Returns null when we should fall back to the local path
   //     (not signed in / server unreachable); returns { reason } when the server
   //     was reached but refused (daily limit / expired login).
-  function callServer(pick, text, instruction, temperature) {
+  function callServer(pick, text, instruction, temperature, generate) {
     var Auth = window.KaeyaAuth;
     if (!Auth || !Auth.isSignedIn()) return Promise.resolve(null);
 
     return Auth.getAccessToken().then(function (token) {
       if (!token) return null;
+      // "generate" (Answer/Explain): `text` IS the user's request; the server
+      // uses its answer brain and the user's words drive the shape + length.
+      // Otherwise it's a rewrite: instruction applied to text.
+      var body = generate
+        ? {
+            text: text,
+            mode: "generate",
+            provider: pick.provider,
+            tier: pick.tier,
+            model: pick.model,
+            temperature: (typeof temperature === "number" ? temperature : 0.55)
+          }
+        : {
+            text: text,
+            instruction: instruction,
+            provider: pick.provider,
+            tier: pick.tier,
+            model: pick.model,
+            temperature: (typeof temperature === "number" ? temperature : 0.5)
+          };
       return fetch(Auth.url + "/functions/v1/ai", {
         method: "POST",
         headers: {
@@ -170,14 +190,7 @@
           "apikey": Auth.anon,
           "Authorization": "Bearer " + token
         },
-        body: JSON.stringify({
-          text: text,
-          instruction: instruction,
-          provider: pick.provider,
-          tier: pick.tier,
-          model: pick.model,
-          temperature: (typeof temperature === "number" ? temperature : 0.5)
-        })
+        body: JSON.stringify(body)
       }).then(function (r) {
         return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; },
           function () { return { ok: r.ok, status: r.status, body: {} }; });
@@ -222,8 +235,8 @@
   }
 
   // Router: server first (when signed in), local as the safety net.
-  function callProvider(pick, text, instruction, temperature) {
-    return callServer(pick, text, instruction, temperature).then(function (sres) {
+  function callProvider(pick, text, instruction, temperature, generate) {
+    return callServer(pick, text, instruction, temperature, generate).then(function (sres) {
       if (sres && sres.text) return { text: sres.text, engine: sres.engine };
       // Server was reached but refused (limit / expired login): respect it —
       // show the demo brain result with the reason, don't silently bypass.
@@ -298,6 +311,8 @@
 
   // Public entry point the UI calls. Returns the routing info + the result text.
   function run(text, instruction, opts) {
+    opts = opts || {};
+    var generate = !!opts.generate;        // Answer/Explain: answer a request, don't rewrite
     var pick = route(text, instruction, opts);
     var base = withPersona(instruction);   // persona-enriched instruction sent to the model
 
@@ -317,15 +332,15 @@
     }
 
     // First pass at a moderate temperature.
-    return callProvider(pick, text, base, 0.55).then(function (res) {
+    return callProvider(pick, text, base, 0.55, generate).then(function (res) {
       // If a real model just gave the SAME text back (common when re-improving
       // already-good text), push once more for a genuinely different version —
-      // but ONLY for big/complex tasks. For a simple "fix grammar" on already-
-      // clean text, returning it unchanged is the correct answer, not a rewrite.
-      if (res.engine !== "mock" && pick.tier === "large" && sameText(res.text, text)) {
+      // but ONLY for big/complex REWRITES. A generated answer is not a rewrite,
+      // so skip this entirely for generate mode.
+      if (!generate && res.engine !== "mock" && pick.tier === "large" && sameText(res.text, text)) {
         var harder = base +
           " The text may already be polished — produce a NOTICEABLY different and further improved version. Do not return the original wording unchanged.";
-        return callProvider(pick, text, harder, 0.95).then(function (res2) {
+        return callProvider(pick, text, harder, 0.95, generate).then(function (res2) {
           // If it STILL matches, keep whatever we got (nothing more to gain).
           return finish(res2 && res2.text ? res2 : res);
         });
