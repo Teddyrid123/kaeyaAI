@@ -436,6 +436,21 @@
     box-shadow:0 2px 6px rgba(0,0,0,.35); transition:transform .25s; }
   .setswitch[aria-pressed="true"]{ background:linear-gradient(120deg,var(--accent-2),var(--cyan)); border-color:transparent; }
   .setswitch[aria-pressed="true"] b{ transform:translateX(22px); }
+  .voice-out-row{ margin:0 0 14px; padding:12px 14px; }
+  .voice-out-row .setname{ font-size:13.5px; }
+
+  .voice-ptt-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:22px 0; }
+  .voice-ptt{ display:flex; flex-direction:column; align-items:center; gap:8px; width:104px; height:104px;
+    border-radius:50%; border:1px solid var(--stroke-2); background:var(--panel); color:var(--ink-soft);
+    cursor:pointer; font-family:var(--font); font-size:11.5px; font-weight:700; justify-content:center;
+    transition:background .15s, border-color .15s, color .15s, transform .1s; user-select:none; touch-action:none; }
+  .voice-ptt:hover:not(:disabled){ border-color:var(--accent-2); color:var(--ink); }
+  .voice-ptt.is-recording{ background:linear-gradient(120deg,var(--accent-2),var(--cyan)); border-color:transparent;
+    color:#fff; transform:scale(1.05); }
+  .voice-ptt:disabled{ opacity:.5; cursor:not-allowed; }
+  .voice-ptt-hint{ font-size:12.5px; color:var(--ink-faint); text-align:center; min-height:1.4em; }
+  .voice-confirm{ display:flex; flex-direction:column; gap:10px; }
+  .voice-confirm .guide-choice{ margin-top:2px; }
 
   /* ================= Dark mode ================= */
   html.dark{
@@ -640,10 +655,9 @@
               <span class="lb">Desktop Organization</span>
               <span class="soon">Soon</span>
             </button>
-            <button class="ftab is-soon" type="button" role="tab" aria-selected="false" data-cat="voice">
+            <button class="ftab" type="button" role="tab" aria-selected="false" data-cat="voice">
               <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg></span>
               <span class="lb">Voice Command</span>
-              <span class="soon">Soon</span>
             </button>
           </div>
 
@@ -678,6 +692,13 @@
 
             <section class="fpanel" data-cat="context" role="tabpanel" hidden>
               <p class="fintro">Stuck on something on your screen? Kaeya can take one look at your screen and walk you through it in simple steps &mdash; or explain any text you&rsquo;ve selected, in plain language.</p>
+              <div class="setrow voice-out-row">
+                <div class="setinfo">
+                  <div class="setname">&#128266; Read the steps out loud</div>
+                  <div class="setdesc">Kaeya will also speak each step, not just show it.</div>
+                </div>
+                <button class="setswitch" id="voiceOutToggle" type="button" aria-pressed="false" aria-label="Read guidance out loud"><b></b></button>
+              </div>
               <div class="chips">
                 <button class="chip chip-primary" data-guide="1">Guide me step by step</button>
                 <button class="chip" data-p="Explain this in simple, plain language a beginner can understand">Explain this text</button>
@@ -695,7 +716,14 @@
             </section>
 
             <section class="fpanel" data-cat="voice" role="tabpanel" hidden>
-              <p class="fintro">Speak instead of type &mdash; e.g. &ldquo;improve this text&rdquo;, &ldquo;summarize this&rdquo;, &ldquo;organize my desktop&rdquo;, or &ldquo;translate this to French&rdquo;.</p>
+              <p class="fintro">Hold the button, say what you want Kaeya to do to your selected text, then let go &mdash; e.g. &ldquo;improve this text&rdquo;, &ldquo;summarize this&rdquo;, or &ldquo;translate this to French&rdquo;.</p>
+              <div class="voice-ptt-wrap">
+                <button type="button" class="voice-ptt" id="voicePttBtn" disabled aria-label="Hold to talk">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
+                  <span id="voicePttLabel">Hold to talk</span>
+                </button>
+                <p class="voice-ptt-hint" id="voicePttHint">Sign in to use voice.</p>
+              </div>
             </section>
           </div>
 
@@ -1165,6 +1193,9 @@
     if(captureBox) captureBox.hidden = !(captured || activeCat === 'text');
   }
   function selectCat(cat){
+    // Leaving the Voice tab drops any unconfirmed transcript, so a leftover
+    // "Yes, do this" button (if still showing) can't act on stale context.
+    if(activeCat === 'voice' && cat !== 'voice') voicePendingTranscript = '';
     activeCat = cat;
     if(ftabs){
       var tabs = ftabs.querySelectorAll('.ftab');
@@ -1640,6 +1671,7 @@
         '<button type="button" class="gnext" data-guidenext="1">Next &rarr;</button>' +
         '<button type="button" class="gnav-back" data-guidestop="1">Stop</button>' +
       '</div>';
+    speak(step.say);
 
     modelTag.innerHTML =
       '<span class="dot"></span> Handled by <b>' + guideModelLabel + '</b> ' +
@@ -1683,10 +1715,12 @@
     var invoke = tauriInvoke();
     if(invoke) invoke('clear_point').catch(function(){});
     guideCurrent = null; guideHistory = [];
-    var msg = (finalMsg && finalMsg.trim()) ? escHtml(finalMsg.trim()) : 'You’re all set! &#127881;';
+    var plainMsg = (finalMsg && finalMsg.trim()) ? finalMsg.trim() : 'You’re all set!';
+    var msg = escHtml(plainMsg) + (finalMsg && finalMsg.trim() ? '' : ' &#127881;');
     resultText.innerHTML = '<p><strong>' + msg + '</strong></p>' +
       '<p>Ask Kaeya anything else, anytime.</p>';
     modelTag.hidden = true;
+    speak(plainMsg);
   }
 
   // The on-screen helper (Text list mode): one photo, plain numbered steps.
@@ -1704,6 +1738,7 @@
 
     KonxAI.runVision(q).then(function(out){
       resultText.innerHTML = formatGuidance(out.text);
+      speak(cleanForSpeech(out.text));
       modelTag.innerHTML =
         '<span class="dot"></span> Handled by <b>' + out.modelLabel + '</b>' +
         ' <span class="tier">screen help</span>' +
@@ -1717,6 +1752,165 @@
       resultText.textContent = 'Something went wrong looking at your screen. Please try again.';
       running = false;
     });
+  }
+
+  // ---- Voice IN (Stage 2): push-to-talk, captured entirely in the webview ----
+  // Records raw WAV (not the browser's default compressed format) specifically
+  // so the server can measure the real duration with a plain header read — see
+  // supabase/functions/ai/index.ts. Hold the button, speak one request, let go;
+  // Kaeya shows what it heard and waits for a tap before doing anything with it
+  // — never auto-acts on a transcript, since a misheard word (already seen once
+  // during testing) could otherwise silently corrupt the user's document.
+  var MAX_VOICE_MS = 20000;   // matches the server's own hard ceiling
+  var MIN_VOICE_MS = 500;     // shorter than this -> nothing usable was said
+  var voiceRec = null;
+  var voicePendingTranscript = '';
+
+  function encodeWav(chunks, sampleRate){
+    var totalLen = 0;
+    chunks.forEach(function(c){ totalLen += c.length; });
+    var pcm = new Int16Array(totalLen);
+    var o = 0;
+    chunks.forEach(function(c){
+      for(var i=0;i<c.length;i++){
+        var s = Math.max(-1, Math.min(1, c[i]));
+        pcm[o++] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+    });
+    var dataSize = pcm.length * 2;
+    var buf = new ArrayBuffer(44 + dataSize);
+    var dv = new DataView(buf);
+    function writeStr(off, s){ for(var i=0;i<s.length;i++) dv.setUint8(off+i, s.charCodeAt(i)); }
+    writeStr(0, 'RIFF'); dv.setUint32(4, 36 + dataSize, true); writeStr(8, 'WAVE');
+    writeStr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+    dv.setUint16(22, 1, true); dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    writeStr(36, 'data'); dv.setUint32(40, dataSize, true);
+    new Int16Array(buf, 44).set(pcm);
+    var bytes = new Uint8Array(buf), bin = '';
+    for(var j=0;j<bytes.length;j++) bin += String.fromCharCode(bytes[j]);
+    return btoa(bin);
+  }
+
+  function startVoiceRecording(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      return Promise.reject(new Error('no-media-devices'));
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var source = ctx.createMediaStreamSource(stream);
+      var proc = ctx.createScriptProcessor(4096, 1, 1);
+      var chunks = [];
+      proc.onaudioprocess = function(e){ chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+      source.connect(proc);
+      proc.connect(ctx.destination);   // keeps the graph alive; proc writes no output, so no echo
+      voiceRec = { stream: stream, ctx: ctx, proc: proc, source: source, chunks: chunks, startedAt: Date.now() };
+      voiceRec.capTimer = setTimeout(function(){ endVoicePtt(); }, MAX_VOICE_MS);
+      return true;
+    });
+  }
+
+  function stopVoiceRecording(){
+    if(!voiceRec) return null;
+    var rec = voiceRec; voiceRec = null;
+    if(rec.capTimer) clearTimeout(rec.capTimer);
+    rec.source.disconnect(); rec.proc.disconnect();
+    rec.stream.getTracks().forEach(function(t){ t.stop(); });
+    var sampleRate = rec.ctx.sampleRate, ms = Date.now() - rec.startedAt;
+    rec.ctx.close().catch(function(){});
+    if(ms < MIN_VOICE_MS) return { tooShort: true };
+    return { base64: encodeWav(rec.chunks, sampleRate) };
+  }
+
+  var voicePttBtn = $('voicePttBtn'), voicePttHint = $('voicePttHint'), voicePttLabel = $('voicePttLabel');
+
+  function updateVoiceButtonState(){
+    var can = !!(window.KonxAI && KonxAI.canUseVoice && KonxAI.canUseVoice());
+    voicePttBtn.disabled = !can;
+    if(!voiceRec) voicePttHint.textContent = can ? 'Hold, speak one request, then let go.' : 'Sign in to use voice.';
+  }
+  if(window.KaeyaAuth) KaeyaAuth.onChange(updateVoiceButtonState);
+
+  function showVoiceResult(html, modelTagHtml){
+    result.classList.remove('guidance');
+    var rl = result.querySelector('.lbl'); if(rl) rl.textContent = 'Kaeya heard';
+    resultText.innerHTML = html;
+    if(modelTagHtml){ modelTag.innerHTML = modelTagHtml; modelTag.hidden = false; } else { modelTag.hidden = true; }
+    result.classList.add('show');
+    result.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  function voiceRetryMessage(){
+    showVoiceResult('<div class="voice-confirm"><p>Didn&rsquo;t catch that &mdash; try again.</p></div>');
+  }
+
+  function beginVoicePtt(){
+    if(voiceRec || voicePttBtn.disabled) return;
+    voicePttBtn.classList.add('is-recording');
+    voicePttLabel.textContent = 'Listening…';
+    voicePttHint.textContent = 'Release when you’re done speaking.';
+    startVoiceRecording().catch(function(){
+      voicePttBtn.classList.remove('is-recording');
+      voicePttLabel.textContent = 'Hold to talk';
+      voicePttHint.textContent = 'Could not access your microphone.';
+    });
+  }
+
+  function endVoicePtt(){
+    if(!voiceRec) return;
+    voicePttBtn.classList.remove('is-recording');
+    voicePttLabel.textContent = 'Hold to talk';
+    voicePttHint.textContent = 'Hold, speak one request, then let go.';
+    var out = stopVoiceRecording();
+    if(!out || out.tooShort){ voiceRetryMessage(); return; }
+    showVoiceResult('<p>Kaeya is listening to that…</p>');
+    KonxAI.runVoice(out.base64).then(function(res){
+      if(res.engine === 'mock'){
+        showVoiceResult('<p>' + escHtml(res.message || 'Something went wrong.') + '</p>');
+        return;
+      }
+      var t = (res.text || '').trim();
+      if(t.length < 2){ voiceRetryMessage(); return; }
+      voicePendingTranscript = t;
+      showVoiceResult(
+        '<div class="voice-confirm"><p>Kaeya heard: &ldquo;' + escHtml(t) + '&rdquo;</p>' +
+        '<div class="guide-choice">' +
+          '<button type="button" class="gbtn" data-voiceconfirm="1"><b>&#10003; Yes, do this</b></button>' +
+          '<button type="button" class="gbtn" data-voiceretry="1"><b>&#8635; Try again</b></button>' +
+        '</div></div>',
+        '<span class="dot"></span> Handled by <b>' + res.providerLabel + '</b> <span class="tier">voice</span>'
+      );
+    }).catch(function(){
+      showVoiceResult('<p>Something went wrong. Please try again.</p>');
+    });
+  }
+
+  updateVoiceButtonState();
+  // Pointer Events + pointer capture (not mouse/touch events): capture means
+  // pointerup still fires on this button even if the finger/cursor drifted off
+  // its round hit-target while held, and pointercancel covers an OS-interrupted
+  // touch (e.g. a notification swipe) — both were real ways to cut a recording
+  // short or leave it dangling with the plain mouse/touch listeners this replaces.
+  voicePttBtn.addEventListener('pointerdown', function(e){
+    voicePttBtn.setPointerCapture(e.pointerId);
+    beginVoicePtt();
+  });
+  voicePttBtn.addEventListener('pointerup', endVoicePtt);
+  voicePttBtn.addEventListener('pointercancel', endVoicePtt);
+  // Keyboard: hold Space or Enter, same push-to-talk semantics.
+  voicePttBtn.addEventListener('keydown', function(e){
+    if(e.repeat) return;
+    if(e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter'){ e.preventDefault(); beginVoicePtt(); }
+  });
+  voicePttBtn.addEventListener('keyup', function(e){
+    if(e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter'){ e.preventDefault(); endVoicePtt(); }
+  });
+
+  function confirmVoice(){
+    var t = voicePendingTranscript; voicePendingTranscript = '';
+    if(!t) return;
+    input.value = t;
+    run(t);
   }
 
   $('cards').addEventListener('click', function(e){
@@ -1742,6 +1936,8 @@
     if(mode === 'text'){ runScreenHelp(); return; }
     if(b.getAttribute('data-guidenext')){ guideNext(); return; }
     if(b.getAttribute('data-guidestop')){ endGuide(); return; }
+    if(b.getAttribute('data-voiceconfirm')){ confirmVoice(); return; }
+    if(b.getAttribute('data-voiceretry')){ voiceRetryMessage(); return; }
   });
   $('sendBtn').addEventListener('click', function(){ if(input.value.trim()) run(input.value); });
   input.addEventListener('keydown', function(e){
@@ -1888,6 +2084,26 @@
       if(onChange) onChange(on);
     });
     return { isOn:function(){ return btn.getAttribute('aria-pressed')==='true'; }, set:function(v){ on=v; paint(v); setSetting(key, v?'1':'0'); } };
+  }
+
+  // Voice OUT (Stage 1): read guidance steps aloud. Off by default — no surprise
+  // sound — but lives right in the Contextual Guidance tab, not buried in
+  // Settings, since the whole point is to reach someone who struggles to read.
+  var voiceOut = wireSwitch($('voiceOutToggle'), 'konx-voice-out', false, function(on){
+    if(!on){
+      var invoke = tauriInvoke();
+      if(invoke) invoke('stop_speaking').catch(function(){});
+    }
+  });
+  function speak(text){
+    if(!voiceOut.isOn() || !text) return;
+    var invoke = tauriInvoke();
+    if(!invoke) return;
+    invoke('speak_text', { text: text }).catch(function(){});
+  }
+  // Same markdown strip as formatGuidance, but plain text for the voice — no HTML.
+  function cleanForSpeech(raw){
+    return (raw || '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/[*#`]/g, '').trim();
   }
 
   // Show the floating ball — keep it in sync with the top-bar "Float on edge" toggle.

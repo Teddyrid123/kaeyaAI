@@ -454,11 +454,81 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // 7) Voice IN (Stage 2). Unlike every other feature here, this has NO
+  //    local/offline fallback and NO demo brain — there is no on-device
+  //    speech-to-text, and a mock can't fake a real transcript. It requires a
+  //    signed-in server call, full stop. `canUseVoice()` lets the UI disable
+  //    the mic button up front instead of letting the user record, upload,
+  //    and only THEN discover it can't work.
+  // ------------------------------------------------------------------
+  function canUseVoice() {
+    var Auth = window.KaeyaAuth;
+    return !!(Auth && Auth.isSignedIn());
+  }
+
+  // `audioB64` is a base64 WAV clip, captured entirely in the webview (Web
+  // Audio API) — no Rust/native capture, no Tauri command, matching the
+  // reasoning that the webview can already reach the microphone directly.
+  function runVoice(audioB64) {
+    var provider = config.activeProvider;
+    if (!PROVIDERS[provider]) provider = "gemini";
+
+    function shape(res) {
+      return {
+        provider: provider,
+        providerLabel: PROVIDERS[provider].label,
+        engine: res.engine,
+        reason: res.reason || null,
+        message: res.message || null,
+        text: res.text || ""
+      };
+    }
+    function fail(reason, message) {
+      return shape({ engine: "mock", reason: reason, message: message, text: "" });
+    }
+
+    var Auth = window.KaeyaAuth;
+    if (!Auth || !Auth.isSignedIn()) {
+      return delay(80).then(function () { return fail("signed-out", "Sign in to use voice."); });
+    }
+
+    return Auth.getAccessToken().then(function (token) {
+      if (!token) return fail("signed-out", "Sign in to use voice.");
+      return fetch(Auth.url + "/functions/v1/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": Auth.anon,
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({ mode: "voice", audio: audioB64, provider: provider })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; },
+          function () { return { ok: r.ok, status: r.status, body: {} }; });
+      }).then(function (res) {
+        if (res.ok && res.body) {
+          return shape({ text: res.body.text || "", engine: res.body.engine || provider });
+        }
+        var msg = (res.body && res.body.message) || null;
+        if (res.status === 429) return fail("limit", msg || "Daily voice limit reached.");
+        if (res.status === 401) return fail("auth", msg || "Please sign in again.");
+        return fail("offline", msg || "Something went wrong understanding that.");
+      }).catch(function () {
+        return fail("offline", "Couldn't reach Kaeya. Check your connection.");
+      });
+    }).catch(function () {
+      return fail("offline", "Couldn't reach Kaeya. Check your connection.");
+    });
+  }
+
   window.KonxAI = {
     route: route,
     run: run,
     runVision: runVision,
     runGuideStep: runGuideStep,
+    runVoice: runVoice,
+    canUseVoice: canUseVoice,
     config: config,
     providers: PROVIDERS,
     setProvider: function (name) { if (PROVIDERS[name]) config.activeProvider = name; },

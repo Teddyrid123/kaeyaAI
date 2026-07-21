@@ -20,6 +20,12 @@ mod uia;
 /// be missed). Storing it here makes the first point reliable.
 struct PendingPoint(Arc<Mutex<Option<serde_json::Value>>>);
 
+/// Voice OUT (Stage 1): Kaeya reading guidance aloud via Windows' built-in speech.
+/// `None` means the machine has no speech voice installed — callers get a plain
+/// error instead of a panic. One shared synthesizer, since `tts::Tts::speak`
+/// needs `&mut self` and only one utterance should ever play at a time.
+struct VoiceState(Mutex<Option<tts::Tts>>);
+
 // ---------- Windows-only OS integration ----------
 #[cfg(windows)]
 mod win {
@@ -1167,6 +1173,29 @@ fn snap_orb(app: tauri::AppHandle) -> String {
     "bottom-right".into()
 }
 
+/// Speak text aloud through Windows' built-in speech voice. Cuts off whatever
+/// Kaeya was already saying first, so a new guidance step always wins — the
+/// user should never hear two steps talked over each other.
+#[tauri::command]
+fn speak_text(state: tauri::State<VoiceState>, text: String) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    let voice = guard
+        .as_mut()
+        .ok_or_else(|| "No voice is installed on this computer.".to_string())?;
+    voice.speak(text, true).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Stop any speech in progress (e.g. the user turned the "read aloud" toggle off).
+#[tauri::command]
+fn stop_speaking(state: tauri::State<VoiceState>) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(voice) = guard.as_mut() {
+        voice.stop().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let shared: Arc<Mutex<isize>> = Arc::new(Mutex::new(0));
@@ -1186,6 +1215,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Target(shared))
         .manage(PendingPoint(Arc::new(Mutex::new(None))))
+        .manage(VoiceState(Mutex::new(tts::Tts::default().ok())))
         .invoke_handler(tauri::generate_handler![
             open_konx,
             quick_capture,
@@ -1202,7 +1232,9 @@ pub fn run() {
             list_elements,
             point_at,
             clear_point,
-            take_pending_point
+            take_pending_point,
+            speak_text,
+            stop_speaking
         ])
         .setup(move |app| {
             // ---- Social login (Google/Facebook) plumbing ----

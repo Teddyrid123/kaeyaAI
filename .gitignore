@@ -17,6 +17,10 @@ keys.json
 # === gstack local runtime state (ports, tokens, logs — not project code) ===
 .gstack/
 
+# === Real people's voice recordings — never belongs in a repo ===
+spike-voice-accent/clips/
+spike-voice-accent/results/
+
 # === OS / editor junk ===
 Thumbs.db
 Desktop.ini

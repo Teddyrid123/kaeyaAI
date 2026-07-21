@@ -174,6 +174,62 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   version was built too, but Joseph chose to keep the clean plain-text output. All bold code reverted (no
   `bolds` param on `stream_paste`, no `isHeading`); generate mode + `stripMarkdown` + block-paste KEPT. If
   revisited, use a rich-text (RTF/HTML) clipboard, NOT keyboard toggles.
+- **Voice — staged design APPROVED 2026-07-20 via /office-hours.** Full plan (Stage 0 accent spike →
+  Stage 1 Voice OUT → Stage 2 Voice IN, one button → Stage 3 conversation) lives at
+  `~/.gstack/projects/Teddyrid123-kaeyaAI/LLC-3-main-design-20260720-124309.md`. Founder chose full voice
+  after pushback on other approaches (worksheet packs, pilot pricing) — his call, staged so the
+  accent-accuracy assumption gets tested before real weeks are spent.
+  - **Stage 0 (accent spike) — DONE, PASSED 2026-07-20.** 10 real WhatsApp voice clips from real users,
+    scored against Gemini's free Flash tier: **9/10 correct.** The 1 miss ("make this text shorter" heard
+    as "make this text shut up") was a recoverable mishearing, not garbage — exactly what Stage 2's
+    "show the transcription before acting" rule exists to catch. OpenAI Whisper untested (still blocked
+    on the pre-existing `429 insufficient_quota` — no OpenAI billing set up; a cost gap, not an accent
+    signal). 90% on the free tier alone clears the design doc's own gate ("if accuracy is high, Voice IN
+    proceeds") — **Stage 2 is unblocked.** Throwaway test tool (not shipped): `spike-voice-accent/`
+    (`transcribe.mjs` reads the same local `keys.json` the app uses, calls Gemini + Whisper, same
+    503-overload → small-model fallback the app already uses in production). Decision logged via
+    `gstack-decision-log`.
+  - **Stage 1 (Voice OUT) — DONE & VERIFIED LIVE 2026-07-20.** Kaeya reads guidance aloud using Windows'
+    built-in speech (Rust `tts` crate, WinRT backend, `default-features = false` to skip the Linux-only
+    speech-dispatcher default). New Rust commands `speak_text`/`stop_speaking`, app state `VoiceState`
+    (`Mutex<Option<tts::Tts>>` — `tts::Tts` is `unsafe impl Send + Sync` by the crate author, trusting
+    WinRT's agile-object marshaling, so one shared instance across Tauri's command threads is safe).
+    `speak_text` always passes `interrupt:true` so a new step never talks over the last one. Frontend: a
+    **"🔊 Read the steps out loud"** toggle lives inline in the Contextual Guidance tab (not buried in
+    Settings — the whole point is reaching someone who struggles to read), off by default, persisted to
+    `localStorage['konx-voice-out']` via the existing `wireSwitch` helper. Wired into both the on-screen
+    step guide (`showGuideStep`, `endGuide`) and the text-list screen helper (`runScreenHelp`, through a
+    `cleanForSpeech` markdown strip). Joseph confirmed it works live. No app-side accent risk here — it's
+    reading Kaeya's own generated text, not transcribing a user's voice.
+  - **Stage 2 (Voice IN, one push-to-talk button) — DONE & VERIFIED LIVE 2026-07-21.** A new "Voice
+    Command" tab holds one push-to-talk button (`voicePttBtn`); recording is captured **entirely in the
+    webview** via `getUserMedia` + Web Audio API (`ScriptProcessorNode`), hand-encoded to WAV client-side
+    (`encodeWav`) — no Rust/native capture, no Tauri capability needed (mic access is a plain webview API,
+    not an `invoke()`-able command, confirmed no capability entry required). Uses **Pointer Events with
+    pointer capture** (not mouse/touch listeners) so `pointerup` still fires even if the cursor/finger
+    drifts off the round button while held, plus `pointercancel` for an OS-interrupted touch; Space/Enter
+    keyboard hold is also supported. `KonxAI.runVoice` (`konx-ai.js`) posts `{mode:"voice", audio}` to the
+    Supabase `ai` proxy — **voice has no offline/local-key/demo-brain fallback**, since there's no
+    on-device speech-to-text and a mock can't fake a transcript; `canUseVoice()` disables the button
+    up front for signed-out users instead of failing after a recording. Server (`functions/ai/index.ts`):
+    parses the **real WAV duration from the header itself** (never trusts the client), routes to Gemini
+    (`callGeminiMedia`, generalized from the vision call) or OpenAI Whisper (`callOpenAIAudio`, multipart
+    upload — Whisper has no small/large split so no overload-retry target), and meters on **two
+    independent dimensions**: the existing per-request `consume_quota`/`refund_usage`, plus a new
+    per-day **audio-seconds** budget (`consume_audio_seconds`/`refund_audio_seconds`, migration
+    `20260720190000_voice_audio_quota.sql`, reserve-then-refund same as the request quota, new
+    `usage_daily.audio_seconds` column) — a rejected voice call refunds both. An empty transcript is
+    treated as a successful call (silence/background noise, not an error) for voice specifically. The
+    **"show the transcription before acting" rule is real, not just described**: `endVoicePtt` → Kaeya
+    shows `Kaeya heard: "…"` with **Yes, do this** / **Try again** buttons; only a tap on "Yes" feeds the
+    transcript into the existing capture→instruct→rewrite pipeline (`confirmVoice` → `run(t)`) — no path
+    auto-acts on a transcript. Joseph tested both Stage 1 and Stage 2 live end-to-end (2026-07-21) — both
+    work. **Still open (tracked in `TODOS.md`):** Whisper has zero real accent-accuracy data (blocked on
+    OpenAI billing, not an accent signal — Gemini already cleared Stage 0's bar at 9/10); the
+    `spike-voice-accent/` accuracy evidence is still a throwaway/gitignored spike, not a real regression
+    fixture, pending a privacy decision on the raw clips.
+  - **Stage 3 (conversation) — still gated on Stage 2 being watched working in a real classroom** (the
+    live desk test above is a good sign but not that field test).
 
 ## Repo layout
 ```
