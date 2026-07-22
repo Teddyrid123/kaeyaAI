@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaeya steps</title>
+<style>
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:transparent; overflow:hidden;
+    font-family:'Segoe UI', system-ui, sans-serif; -webkit-user-select:none; user-select:none; }
+
+  /* The whole card sits at reduced opacity so the user can still see their
+     real app through it, and lifts to full opacity when they interact with
+     it — readable when wanted, out of the way when not. */
+  #card{ position:fixed; inset:8px; display:flex; flex-direction:column;
+    border-radius:16px; overflow:hidden; opacity:.82;
+    background:linear-gradient(160deg, rgba(255,255,255,.97), rgba(238,242,255,.95));
+    border:1px solid rgba(120,135,220,.35);
+    box-shadow:0 20px 44px -14px rgba(30,40,110,.55);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    transition:opacity .18s ease; }
+  #card:hover, #card.dragging{ opacity:1; }
+
+  /* Grab strip — the only draggable region, so a click on the text or the
+     buttons doesn't start a drag. */
+  #bar{ display:flex; align-items:center; gap:8px; padding:9px 10px 9px 13px;
+    cursor:grab; background:linear-gradient(120deg,#4f6bff,#7ee0e6); color:#fff; flex:none; }
+  #bar.grabbing{ cursor:grabbing; }
+  #bar .grip{ font-size:13px; opacity:.85; letter-spacing:2px; }
+  #bar .ttl{ flex:1; font-size:12.5px; font-weight:700; letter-spacing:.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #bar button{ flex:none; width:22px; height:22px; border:none; border-radius:50%; cursor:pointer;
+    background:rgba(255,255,255,.25); color:#fff; font-size:12px; font-weight:700; line-height:1; }
+  #bar button:hover{ background:rgba(255,255,255,.42); }
+
+  #body{ flex:1; overflow-y:auto; padding:13px 15px 15px; color:#232838; }
+  #body::-webkit-scrollbar{ width:8px; }
+  #body::-webkit-scrollbar-thumb{ background:rgba(90,105,180,.35); border-radius:8px; }
+
+  .gq{ font-size:11.5px; color:#5f6688; margin:0 0 11px; line-height:1.4; font-style:italic; }
+  .step{ display:flex; gap:9px; margin:0 0 11px; font-size:13.5px; line-height:1.5; }
+  .step .n{ flex:none; width:21px; height:21px; border-radius:50%; margin-top:1px;
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+    color:#fff; background:linear-gradient(135deg,#4f6bff,#6f8cff); }
+  .step .t{ flex:1; min-width:0; }
+  .plain{ font-size:13.5px; line-height:1.55; margin:0 0 9px; }
+  .muted{ font-size:12.5px; color:#5f6688; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div id="card">
+    <div id="bar">
+      <span class="grip">&#8942;&#8942;</span>
+      <span class="ttl" id="ttl">Kaeya &mdash; your steps</span>
+      <button id="closeBtn" type="button" aria-label="Close" title="Close">&#10005;</button>
+    </div>
+    <div id="body"><p class="muted">Kaeya is looking at your screen&hellip;</p></div>
+  </div>
+<script>
+  var TAURI  = window.__TAURI__;
+  var emit   = TAURI.event.emit;
+  var listen = TAURI.event.listen;
+  var appWindow = TAURI.window.getCurrentWindow();
+  var PhysicalPosition = TAURI.window.PhysicalPosition;
+
+  var card = document.getElementById('card');
+  var bar  = document.getElementById('bar');
+  var body = document.getElementById('body');
+  var ttl  = document.getElementById('ttl');
+
+  function escHtml(s){
+    return ('' + s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                   .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Same shape as the main window's formatGuidance: one numbered step per
+  // line, markdown stripped (the model sometimes slips ** or # in even when
+  // asked not to).
+  function render(raw){
+    var text = ('' + (raw || '')).replace(/\r\n/g, '\n').trim();
+    if(!text){ body.innerHTML = '<p class="muted">Kaeya didn’t find anything to explain.</p>'; return; }
+    var out = '', n = 0;
+    text.split('\n').forEach(function(line){
+      var s = line.replace(/^\s*[-*•]\s+/, '')
+                  .replace(/^\s{0,3}#{1,6}\s*/, '')
+                  .replace(/\*\*([^*]+)\*\*/g, '$1')
+                  .replace(/\*([^*]+)\*/g, '$1')
+                  .replace(/`([^`]*)`/g, '$1')
+                  .replace(/\*/g, '')
+                  .trim();
+      if(!s) return;
+      var m = s.match(/^(\d+)[.)]\s*(.+)$/);
+      if(m){
+        n++;
+        out += '<div class="step"><span class="n">' + n + '</span>' +
+               '<span class="t">' + escHtml(m[2]) + '</span></div>';
+      } else {
+        out += '<p class="plain">' + escHtml(s) + '</p>';
+      }
+    });
+    body.innerHTML = out || '<p class="muted">Kaeya didn’t find anything to explain.</p>';
+    body.scrollTop = 0;
+  }
+
+  listen('kaeya-card', function(e){
+    var d = e.payload || {};
+    if(d.title) ttl.textContent = d.title;
+    if(d.loading){
+      body.innerHTML = '<p class="muted">Kaeya is looking at your screen&hellip;</p>';
+      return;
+    }
+    if(d.error){ body.innerHTML = '<p class="muted">' + escHtml(d.error) + '</p>'; return; }
+    var q = d.question
+      ? '<p class="gq">You asked: &ldquo;' + escHtml(d.question) + '&rdquo;</p>' : '';
+    render(d.text);
+    body.innerHTML = q + body.innerHTML;
+    body.scrollTop = 0;
+  });
+
+  document.getElementById('closeBtn').addEventListener('click', function(){
+    emit('kaeya-card-close');
+  });
+
+  /* ---- dragging ----
+     Done in JS against setPosition rather than Tauri's built-in drag region:
+     the native drag path needs the window to be activatable, and this window
+     is deliberately created with focus:false so it doesn't steal focus from
+     whatever the user is actually working in. setPosition calls are throttled
+     to one per animation frame — firing on every raw pointermove (100+/sec)
+     floods the IPC channel and makes the drag feel laggy. */
+  var drag = null, rafId = null, pending = null;
+
+  function flush(){
+    rafId = null;
+    if(!pending) return;
+    var p = pending; pending = null;
+    appWindow.setPosition(new PhysicalPosition(p.x, p.y)).catch(function(){});
+  }
+
+  bar.addEventListener('pointerdown', function(e){
+    if(e.button !== 0) return;
+    if(e.target.closest('button')) return;      // the close button isn't a drag handle
+    drag = { sx:e.screenX, sy:e.screenY, wx:0, wy:0, ready:false };
+    bar.classList.add('grabbing');
+    card.classList.add('dragging');
+    try { bar.setPointerCapture(e.pointerId); } catch(_){}
+    appWindow.outerPosition().then(function(p){
+      if(drag){ drag.wx = p.x; drag.wy = p.y; drag.ready = true; }
+    }).catch(function(){ drag = null; });
+  });
+
+  bar.addEventListener('pointermove', function(e){
+    if(!drag || !drag.ready) return;
+    var dpr = window.devicePixelRatio || 1;
+    pending = {
+      x: Math.round(drag.wx + (e.screenX - drag.sx) * dpr),
+      y: Math.round(drag.wy + (e.screenY - drag.sy) * dpr)
+    };
+    if(rafId === null) rafId = requestAnimationFrame(flush);
+  });
+
+  function endDrag(e){
+    if(!drag) return;
+    drag = null;
+    bar.classList.remove('grabbing');
+    card.classList.remove('dragging');
+    try { bar.releasePointerCapture(e.pointerId); } catch(_){}
+    if(rafId !== null){ cancelAnimationFrame(rafId); rafId = null; }
+    flush();
+  }
+  bar.addEventListener('pointerup', endDrag);
+  bar.addEventListener('pointercancel', endDrag);
+
+  // Tell the main window we're ready, so a result sent before this webview
+  // finished loading isn't lost.
+  emit('kaeya-card-ready');
+</script>
+</body>
+</html>

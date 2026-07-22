@@ -941,6 +941,43 @@ fn clear_point(app: tauri::AppHandle) {
     }
 }
 
+/// Show the floating "steps" card (the Text list mode of the guide). Parks it in
+/// the top-right of the primary monitor the FIRST time only - after that we leave
+/// it wherever the user dragged it, since moving it back under their cursor every
+/// time would undo the whole point of making it movable.
+#[tauri::command]
+fn show_guide_card(app: tauri::AppHandle) -> Result<(), String> {
+    let card = app
+        .get_webview_window("guidecard")
+        .ok_or_else(|| "guidecard window missing".to_string())?;
+
+    // Already on screen (a second step / re-run) - don't move it.
+    if !card.is_visible().unwrap_or(false) {
+        if let Ok(Some(mon)) = card.primary_monitor() {
+            let mpos = *mon.position();
+            let msize = *mon.size();
+            let scale = mon.scale_factor();
+            // Card is declared 340x420 logical px; convert to physical for the margin math.
+            let w = (340.0 * scale) as i32;
+            let margin = (24.0 * scale) as i32;
+            let x = mpos.x + msize.width as i32 - w - margin;
+            let y = mpos.y + margin;
+            let _ = card.set_position(PhysicalPosition::new(x, y));
+        }
+    }
+    card.show().map_err(|e| e.to_string())?;
+    let _ = card.set_always_on_top(true);
+    Ok(())
+}
+
+/// Hide the floating steps card.
+#[tauri::command]
+fn hide_guide_card(app: tauri::AppHandle) {
+    if let Some(card) = app.get_webview_window("guidecard") {
+        let _ = card.hide();
+    }
+}
+
 // ---------- commands called from the UI ----------
 
 /// Called when the user taps the floating orb. Grabs the selected text from the
@@ -1232,6 +1269,8 @@ pub fn run() {
             list_elements,
             point_at,
             clear_point,
+            show_guide_card,
+            hide_guide_card,
             take_pending_point,
             speak_text,
             stop_speaking
@@ -1278,8 +1317,13 @@ pub fn run() {
             // copy from / paste to when the orb is tapped.
             #[cfg(windows)]
             {
+                // Every Kaeya window must be listed here. If one is missing, the
+                // tracker records IT as "the app the user was working in" the
+                // moment it takes foreground, and the next copy/paste targets
+                // Kaeya's own window instead of Word/Gmail. The guidecard is
+                // interactive (the user drags it), so it WILL take foreground.
                 let mut ours: Vec<isize> = Vec::new();
-                for label in ["main", "orb", "overlay"] {
+                for label in ["main", "orb", "overlay", "guidecard"] {
                     if let Some(w) = app.get_webview_window(label) {
                         if let Ok(h) = w.hwnd() {
                             ours.push(h.0 as isize);

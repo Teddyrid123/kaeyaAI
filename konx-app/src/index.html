@@ -1445,6 +1445,60 @@
 
   listen('konx-guide-stop-tap', function(){ ringGuideEnd(); });
 
+  /* ---- ring Guide, Text-list mode: the floating steps card ----
+     The same two choices the in-app "Guide me step by step" button offers, but
+     driven from the ball: "Point on screen" walks the arrow one step at a time,
+     "Show a step list" takes ONE photo and writes the whole list into a
+     low-opacity card the user can drag out of their way (guidecard.html).
+     The two modes are mutually exclusive — starting one clears the other. */
+  var pendingGuideGoal = '', lastCardPayload = null;
+
+  function cardEmit(p){ lastCardPayload = p; emit('kaeya-card', p); }
+  // If the card's webview finishes loading after we already sent a result,
+  // it asks for it — otherwise that first result would be lost.
+  listen('kaeya-card-ready', function(){ if(lastCardPayload) emit('kaeya-card', lastCardPayload); });
+  listen('kaeya-card-close', function(){
+    lastCardPayload = null;
+    invoke('hide_guide_card').catch(function(){});
+  });
+
+  function askGuideModeOnOrb(goal){
+    pendingGuideGoal = goal;
+    emit('konx-voice-bubble', { mode:'guidemode' });
+  }
+
+  function runCardGuide(goal){
+    if(quickBusy) return;
+    quickBusy = true;
+    quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 60000);
+    ringGuideEnd();                                    // never both modes at once
+    orbState('working');
+    invoke('show_guide_card').catch(function(){});
+    cardEmit({ loading:true });
+    KonxAI.runVision(goal).then(function(out){
+      cardEmit({ question: goal, text: out.text });
+      speak(cleanForSpeech(out.text));
+      orbState(out.engine === 'mock' ? 'demo' : 'done');
+      endQuick();
+    }).catch(function(){
+      cardEmit({ error:'Something went wrong looking at your screen. Please try again.' });
+      orbState('empty'); endQuick();
+    });
+  }
+
+  listen('konx-guide-mode-pick', function(e){
+    var goal = pendingGuideGoal; pendingGuideGoal = '';
+    if(!goal) return;
+    if(e.payload === 'text'){ runCardGuide(goal); return; }
+    // On-screen arrows: hide any card still up, then start the step walker.
+    invoke('hide_guide_card').catch(function(){});
+    lastCardPayload = null;
+    if(quickBusy) return;
+    quickBusy = true;
+    quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
+    ringGuideStart(goal);
+  });
+
   // ---------- ring-triggered Voice (Voice satellite: hold-to-talk) ----------
   // Reuses the exact same recording/transcription pipeline as the Voice
   // Command tab (startVoiceRecording/stopVoiceRecording/encodeWav/KonxAI.
@@ -1539,14 +1593,22 @@
     var spokenText = takeVoiceText();
 
     if(task === 'guide'){
+      // Mid-walkthrough, this click means "I did that — what's next?"
+      if(ringGuideActive){
+        quickBusy = true;
+        quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
+        ringGuideStep();
+        return;
+      }
+      // Otherwise: get the goal, then ask HOW to help (arrows vs step list).
+      if(spokenText){ askGuideModeOnOrb(spokenText); return; }
       quickBusy = true;
       quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
-      if(ringGuideActive){ ringGuideStep(); return; }
-      if(spokenText){ ringGuideStart(spokenText); return; }
       invoke('quick_capture').then(function(raw){
         var text = (raw || '').trim();
-        if(!text){ orbState('empty'); endQuick(); return; }
-        ringGuideStart(text);
+        endQuick();   // release the lock while the choice bubble waits on the user
+        if(!text){ orbState('empty'); return; }
+        askGuideModeOnOrb(text);
       }).catch(function(){ orbState('empty'); endQuick(); });
       return;
     }

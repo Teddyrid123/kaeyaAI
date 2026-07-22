@@ -155,6 +155,7 @@
   #bubble.show{ opacity:1; pointer-events:auto; transform:scale(1); }
   #bubble p{ margin:0 0 10px; font-size:12.5px; line-height:1.4; }
   #bubble .brow{ display:flex; gap:8px; justify-content:center; }
+  #bubble .brow.bcol{ flex-direction:column; }   /* two full-width choices */
   #bubble button{ border:none; border-radius:10px; padding:7px 12px; font-size:11.5px;
     font-weight:700; cursor:pointer; font-family:inherit; }
   #bubble .yes{ background:#2f6bff; color:#fff; }
@@ -308,37 +309,51 @@
   // this same expanded canvas instead of needing its own resize logic.
   var keepOpenForBubble = false;
 
+  // Set while a shrink-back is still in flight. Any expand MUST wait for it,
+  // or it would measure the still-expanded window and save THAT as the
+  // collapsed size — leaving the orb permanently oversized.
+  var restoring = null;
+
+  // Grow the orb window to fit the ring (or the bubble), remembering the size
+  // it had so closeMenu() can put it back. Shared by both so the geometry
+  // bookkeeping exists in exactly one place.
+  function expandWindow(){
+    return Promise.resolve(restoring).then(function(){
+      return Promise.all([appWindow.outerPosition(), appWindow.outerSize(), currentMonitor()]);
+    }).then(function(res){
+      var pos = res[0], size = res[1], mon = res[2];
+      if(!savedGeom) savedGeom = { x: pos.x, y: pos.y, w: size.width, h: size.height };
+      var dpr = window.devicePixelRatio || 1;
+      var openPx = Math.round(OPEN * dpr);
+      // keep the ball centred where it is now, then clamp fully on-screen
+      var cx = pos.x + size.width / 2, cy = pos.y + size.height / 2;
+      var nx = Math.round(cx - openPx / 2), ny = Math.round(cy - openPx / 2);
+      if(mon){
+        var mp = mon.position, ms = mon.size;
+        nx = Math.max(mp.x, Math.min(nx, mp.x + ms.width - openPx));
+        ny = Math.max(mp.y, Math.min(ny, mp.y + ms.height - openPx));
+      }
+      return appWindow.setSize(new PhysicalSize(openPx, openPx)).then(function(){
+        return appWindow.setPosition(new PhysicalPosition(nx, ny));
+      });
+    });
+  }
+
   function openMenu(){
     if(menuOpen || drag) return;
     menuOpen = true;
-    Promise.all([appWindow.outerPosition(), appWindow.outerSize(), currentMonitor()])
-      .then(function(res){
-        var pos = res[0], size = res[1], mon = res[2];
-        savedGeom = { x: pos.x, y: pos.y, w: size.width, h: size.height };
-        var dpr = window.devicePixelRatio || 1;
-        var openPx = Math.round(OPEN * dpr);
-        // keep the ball centred where it is now, then clamp fully on-screen
-        var cx = pos.x + size.width / 2, cy = pos.y + size.height / 2;
-        var nx = Math.round(cx - openPx / 2), ny = Math.round(cy - openPx / 2);
-        if(mon){
-          var mp = mon.position, ms = mon.size;
-          nx = Math.max(mp.x, Math.min(nx, mp.x + ms.width - openPx));
-          ny = Math.max(mp.y, Math.min(ny, mp.y + ms.height - openPx));
-        }
-        return appWindow.setSize(new PhysicalSize(openPx, openPx)).then(function(){
-          return appWindow.setPosition(new PhysicalPosition(nx, ny));
-        });
-      })
+    expandWindow()
       .then(function(){ if(menuOpen) stage.classList.add('open'); })
       .catch(function(){ menuOpen = false; });
   }
 
   function restoreWindowGeom(){
-    if(!savedGeom) return;
+    if(!savedGeom) return restoring || Promise.resolve();
     var g = savedGeom; savedGeom = null;
-    appWindow.setSize(new PhysicalSize(g.w, g.h)).then(function(){
+    restoring = appWindow.setSize(new PhysicalSize(g.w, g.h)).then(function(){
       return appWindow.setPosition(new PhysicalPosition(g.x, g.y));
-    }).catch(function(){});
+    }).catch(function(){}).then(function(){ restoring = null; });
+    return restoring;
   }
 
   // True while the ring is showing specifically to act on something the user
@@ -449,26 +464,19 @@
     keepOpenForBubble = true;
     if(!menuOpen){
       menuOpen = true;
-      Promise.all([appWindow.outerPosition(), appWindow.outerSize(), currentMonitor()])
-        .then(function(res){
-          var pos = res[0], size = res[1], mon = res[2];
-          if(!savedGeom) savedGeom = { x: pos.x, y: pos.y, w: size.width, h: size.height };
-          var dpr = window.devicePixelRatio || 1;
-          var openPx = Math.round(OPEN * dpr);
-          var cx = pos.x + size.width / 2, cy = pos.y + size.height / 2;
-          var nx = Math.round(cx - openPx / 2), ny = Math.round(cy - openPx / 2);
-          if(mon){
-            var mp = mon.position, ms = mon.size;
-            nx = Math.max(mp.x, Math.min(nx, mp.x + ms.width - openPx));
-            ny = Math.max(mp.y, Math.min(ny, mp.y + ms.height - openPx));
-          }
-          return appWindow.setSize(new PhysicalSize(openPx, openPx)).then(function(){
-            return appWindow.setPosition(new PhysicalPosition(nx, ny));
-          });
-        }).catch(function(){});
+      expandWindow().catch(function(){});
     }
     if(d.mode === 'listening'){
       bubble.innerHTML = '<p>Kaeya is listening to that&hellip;</p>';
+    } else if(d.mode === 'guidemode'){
+      // Same choice the "Guide me step by step" button offers inside the app,
+      // brought out to the ball so the window never has to open.
+      bubble.innerHTML =
+        '<p>How should Kaeya help?</p>' +
+        '<div class="brow bcol">' +
+          '<button type="button" class="yes" data-guidemode="screen">&#128073; Point on screen</button>' +
+          '<button type="button" class="retry" data-guidemode="text">&#128196; Show a step list</button>' +
+        '</div>';
     } else if(d.mode === 'retry'){
       bubble.innerHTML = '<p>Didn&rsquo;t catch that &mdash; try again.</p>';
     } else if(d.mode === 'heard'){
@@ -506,6 +514,8 @@
     var b = e.target.closest('button'); if(!b) return;
     if(b.getAttribute('data-voice-yes')){ emit('konx-voice-yes-tap'); ringFromBubble(); return; }
     if(b.getAttribute('data-voice-retry')){ emit('konx-voice-retry-tap'); hideBubble(); return; }
+    var gm = b.getAttribute('data-guidemode');
+    if(gm){ emit('konx-guide-mode-pick', gm); hideBubble(); return; }
   });
 
   // ---------- tap = open, double-tap = quick default, drag = move ----------

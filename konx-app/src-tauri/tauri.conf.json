@@ -54,6 +54,21 @@
         "visible": false,
         "focus": false,
         "shadow": false
+      },
+      {
+        "label": "guidecard",
+        "url": "guidecard.html",
+        "title": "Kaeya steps",
+        "width": 340,
+        "height": 420,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "shadow": false
       }
     ],
     "security": {
