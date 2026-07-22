@@ -439,6 +439,22 @@
   .voice-out-row{ margin:0 0 14px; padding:12px 14px; }
   .voice-out-row .setname{ font-size:13.5px; }
 
+  /* "Buttons around the ball" picker — a stacked row (label on top, the
+     choices underneath) since 8 chips don't fit beside the description. */
+  .setrow-stack{ display:block; }
+  .ringpick{ display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; }
+  .ringpick button{ display:flex; align-items:center; gap:7px; padding:8px 13px 8px 10px;
+    border-radius:999px; cursor:pointer; font-family:var(--font); font-size:13px; font-weight:600;
+    color:var(--ink-soft); background:var(--panel); border:1px solid var(--stroke-2);
+    transition:background .18s, border-color .18s, color .18s, opacity .18s; }
+  .ringpick button .rp-emo{ font-size:15px; line-height:1; }
+  .ringpick button .rp-tick{ font-size:11px; opacity:0; transition:opacity .18s; }
+  .ringpick button[aria-pressed="true"]{ color:#fff; border-color:transparent;
+    background:linear-gradient(120deg,var(--accent-2),var(--cyan)); }
+  .ringpick button[aria-pressed="true"] .rp-tick{ opacity:.95; }
+  .ringpick button:disabled{ cursor:not-allowed; opacity:.55; }
+  .ringpick-note{ margin-top:10px; font-size:12.5px; color:var(--ink-soft); line-height:1.4; }
+
   .voice-ptt-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:22px 0; }
   .voice-ptt{ display:flex; flex-direction:column; align-items:center; gap:8px; width:104px; height:104px;
     border-radius:50%; border:1px solid var(--stroke-2); background:var(--panel); color:var(--ink-soft);
@@ -982,6 +998,14 @@
               </div>
               <button class="setswitch" id="orbVisToggle" type="button" aria-pressed="true" aria-label="Show the floating ball"><b></b></button>
             </div>
+            <div class="setrow setrow-stack">
+              <div class="setinfo">
+                <div class="setname">Buttons around the ball</div>
+                <div class="setdesc">Pick which ones you want. Tap to turn on or off — keep at least 3.</div>
+              </div>
+              <div class="ringpick" id="ringPick"></div>
+              <div class="ringpick-note" id="ringPickNote"></div>
+            </div>
           </div>
 
           <div class="setgroup">Writing</div>
@@ -1455,23 +1479,70 @@
   });
 
   var ringPendingTranscript = '';
+  // What the user said, confirmed and waiting for them to pick an action from
+  // the ring. Held in memory, NOT pasted — speaking "show me how to change my
+  // desktop background" should not dump that sentence into their document;
+  // the ring action decides what happens with it.
+  var ringVoiceText = '';
+
   listen('konx-voice-yes-tap', function(){
-    var t = ringPendingTranscript; ringPendingTranscript = '';
-    if(!t){ orbState('empty'); return; }
-    // Standard OS paste semantics: replaces a current selection if one
-    // exists, inserts at the cursor otherwise — same as every other ring
-    // action already behaves, no special detection needed (Premise 5).
-    invoke('apply_text', { text: t }).then(function(){ orbState('done'); }).catch(function(){ orbState('empty'); });
+    ringVoiceText = ringPendingTranscript;
+    ringPendingTranscript = '';
+    // The orb swaps the bubble for the ring; the next satellite click runs
+    // against this text instead of grabbing a selection off the screen.
   });
   listen('konx-voice-retry-tap', function(){ ringPendingTranscript = ''; });
+  // The voice ring closed without a button being picked — throw the transcript
+  // away so it can't leak into an unrelated action later.
+  listen('konx-voice-discard', function(){ ringVoiceText = ''; });
+
+  // Hand over the held transcript exactly once.
+  function takeVoiceText(){
+    var t = ringVoiceText; ringVoiceText = '';
+    return t;
+  }
+
+  // Run one of the 6 writing actions against `text`, wherever that text came
+  // from (a selection on screen, or something the user just spoke).
+  // `spoken` = the text was dictated, so there's nothing selected in the app
+  // to replace — always write at the cursor instead.
+  function runRadialWith(cfg, text, spoken){
+    var ins = cfg.ins || ('Translate this into ' + getSetting('konx-lang','English'));
+    // In generate mode the composed request is what the model answers; the
+    // rewrites just send the captured selection.
+    var payloadText = (cfg.gen && cfg.req) ? cfg.req(text) : text;
+    orbState('working');
+    return KonxAI.run(payloadText, ins, { deepThink: !!cfg.deep, generate: !!cfg.gen }).then(function(out){
+      // Answers/explanations are written into Word: clean out any Markdown
+      // symbols. Rewrites are left exactly as the model returned them.
+      var finalText = cfg.gen ? stripMarkdown(out.text) : out.text;
+      if(histOn()){
+        addHistory({
+          id: 'k' + Date.now() + '-' + Math.floor(Math.random()*1000),
+          ts: Date.now(), instruction: ins, source: text,
+          result: finalText, model: out.modelLabel, tier: out.tier, engine: out.engine
+        });
+      }
+      var chunks = splitSentences(finalText);
+      return invoke('stream_paste', {
+        sentences: chunks,
+        append: spoken ? true : (cfg.mode === 'append')
+      }).then(function(){
+        orbState(out.engine === 'mock' ? 'demo' : 'done'); endQuick();
+      });
+    });
+  }
 
   function radialAction(task){
     if(quickBusy) return;
+    // Something the user just spoke and confirmed, waiting for this action.
+    var spokenText = takeVoiceText();
 
     if(task === 'guide'){
       quickBusy = true;
       quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
       if(ringGuideActive){ ringGuideStep(); return; }
+      if(spokenText){ ringGuideStart(spokenText); return; }
       invoke('quick_capture').then(function(raw){
         var text = (raw || '').trim();
         if(!text){ orbState('empty'); endQuick(); return; }
@@ -1490,30 +1561,16 @@
     if(!cfg) return;
     quickBusy = true;
     quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
+
+    if(spokenText){
+      runRadialWith(cfg, spokenText, true).catch(function(){ orbState('empty'); endQuick(); });
+      return;
+    }
+
     invoke('quick_capture').then(function(raw){
       var text = (raw || '').trim();
       if(!text){ orbState('empty'); endQuick(); return; }
-      var ins = cfg.ins || ('Translate this into ' + getSetting('konx-lang','English'));
-      // In generate mode the composed request is what the model answers; the
-      // rewrites just send the captured selection.
-      var payloadText = (cfg.gen && cfg.req) ? cfg.req(text) : text;
-      orbState('working');
-      return KonxAI.run(payloadText, ins, { deepThink: !!cfg.deep, generate: !!cfg.gen }).then(function(out){
-        // Answers/explanations are written into Word: clean out any Markdown
-        // symbols. Rewrites are left exactly as the model returned them.
-        var finalText = cfg.gen ? stripMarkdown(out.text) : out.text;
-        if(histOn()){
-          addHistory({
-            id: 'k' + Date.now() + '-' + Math.floor(Math.random()*1000),
-            ts: Date.now(), instruction: ins, source: text,
-            result: finalText, model: out.modelLabel, tier: out.tier, engine: out.engine
-          });
-        }
-        var chunks = splitSentences(finalText);
-        return invoke('stream_paste', { sentences: chunks, append: cfg.mode === 'append' }).then(function(){
-          orbState(out.engine === 'mock' ? 'demo' : 'done'); endQuick();
-        });
-      });
+      return runRadialWith(cfg, text, false);
     }).catch(function(){ orbState('empty'); endQuick(); });
   }
   listen('konx-radial', function(e){ radialAction(e.payload); });
@@ -2232,6 +2289,87 @@
   // Preview-before-replacing + Save-history are read live via previewOn()/histOn().
   wireSwitch($('previewToggle'), 'konx-preview', true);
   wireSwitch($('histToggle'), 'konx-savehist', true);
+
+  /* ---- "Buttons around the ball": the user picks their own ring ----
+     Saved as a list of ids in localStorage['konx-ring'] and pushed to the orb
+     window live via the 'konx-ring' event, so the ring redraws immediately —
+     no restart. The catalog + geometry live in orb.html; this is just the
+     picker. Between 3 and 8: fewer than 3 isn't a ring, and past 8 the
+     buttons start overlapping each other on hover. */
+  var RING_CATALOG = [
+    { id:'answer',    emo:'💬', lbl:'Answer' },
+    { id:'improve',   emo:'✨',       lbl:'Improve' },
+    { id:'summarize', emo:'📝', lbl:'Summary' },
+    { id:'translate', emo:'🌐', lbl:'Translate' },
+    { id:'explain',   emo:'💡', lbl:'Explain' },
+    { id:'fix',       emo:'✓',       lbl:'Fix' },
+    { id:'guide',     emo:'🧭', lbl:'Guide' },
+    { id:'voice',     emo:'🎤', lbl:'Voice' }
+  ];
+  var RING_MIN = 3, RING_MAX = 8;
+  var ringPick = $('ringPick'), ringPickNote = $('ringPickNote');
+
+  function ringDefaults(){ return RING_CATALOG.map(function(c){ return c.id; }); }
+
+  function readRing(){
+    try {
+      var raw = localStorage.getItem('konx-ring');
+      if(raw){
+        var ids = JSON.parse(raw);
+        if(Object.prototype.toString.call(ids) === '[object Array]'){
+          ids = ids.filter(function(id){
+            for(var i=0;i<RING_CATALOG.length;i++) if(RING_CATALOG[i].id === id) return true;
+            return false;
+          });
+          if(ids.length >= RING_MIN && ids.length <= RING_MAX) return ids;
+        }
+      }
+    } catch(e){}
+    return ringDefaults();
+  }
+
+  function saveRing(ids){
+    try { localStorage.setItem('konx-ring', JSON.stringify(ids)); } catch(e){}
+    try { emit('konx-ring', ids); } catch(e){}
+  }
+
+  function paintRingPick(){
+    var chosen = readRing();
+    var atMin = chosen.length <= RING_MIN, atMax = chosen.length >= RING_MAX;
+    ringPick.innerHTML = RING_CATALOG.map(function(c){
+      var on = chosen.indexOf(c.id) !== -1;
+      // Don't let the user strand themselves: the last 3 can't be removed,
+      // and nothing new can be added once the ring is full.
+      var locked = (on && atMin) || (!on && atMax);
+      return '<button type="button" data-ring="' + c.id + '" aria-pressed="' + (on ? 'true':'false') + '"' +
+        (locked ? ' disabled' : '') + '>' +
+        '<span class="rp-emo">' + c.emo + '</span>' + escHtml(c.lbl) +
+        '<span class="rp-tick">✓</span></button>';
+    }).join('');
+    ringPickNote.textContent = chosen.length + ' of ' + RING_MAX + ' showing.' +
+      (atMin ? ' That’s the minimum — turn another one on before removing these.'
+             : (atMax ? ' That’s the maximum — turn one off to swap in another.' : ''));
+  }
+
+  ringPick.addEventListener('click', function(e){
+    var b = e.target.closest('button[data-ring]'); if(!b || b.disabled) return;
+    var id = b.getAttribute('data-ring');
+    var chosen = readRing(), at = chosen.indexOf(id);
+    if(at !== -1){
+      if(chosen.length <= RING_MIN) return;
+      chosen.splice(at, 1);
+    } else {
+      if(chosen.length >= RING_MAX) return;
+      // Keep the catalog's order so the ring layout stays predictable.
+      chosen.push(id);
+      chosen = RING_CATALOG.map(function(c){ return c.id; })
+                           .filter(function(x){ return chosen.indexOf(x) !== -1; });
+    }
+    saveRing(chosen);
+    paintRingPick();
+  });
+
+  paintRingPick();
 
   // Default AI brain (segmented) — shares state with the top-bar OpenAI/Gemini switch.
   var defBrain = $('defBrain');

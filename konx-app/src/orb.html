@@ -94,9 +94,12 @@
   #ring{ position:absolute; left:50%; top:50%; width:0; height:0; z-index:2; }
 
   /* A soft aurora glow that blooms behind the ring while it's open — makes the
-     whole menu feel like it lights up rather than just popping in. */
-  #stage::before{ content:""; position:absolute; left:50%; top:50%; width:330px; height:330px;
-    margin:-165px 0 0 -165px; border-radius:50%; pointer-events:none; z-index:0;
+     whole menu feel like it lights up rather than just popping in. Sized from
+     --glow, which renderRing() sets to match however many buttons are showing. */
+  #stage::before{ content:""; position:absolute; left:50%; top:50%;
+    width:var(--glow,330px); height:var(--glow,330px);
+    margin:calc(var(--glow,330px) / -2) 0 0 calc(var(--glow,330px) / -2);
+    border-radius:50%; pointer-events:none; z-index:0;
     background: radial-gradient(circle, rgba(123,140,255,.30), rgba(126,224,230,.14) 42%, transparent 68%);
     opacity:0; transform:scale(.35);
     transition: opacity .4s ease, transform .5s cubic-bezier(.22,1,.36,1); }
@@ -118,18 +121,12 @@
   #stage.open .sat{ opacity:1; pointer-events:auto;
     transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(1); }
   /* Staggered bloom — each satellite fans out just after the one before it.
-     Extended from 6 to 8 (2026-07-22 ring redesign: Guide + Voice added). The
-     radius was bumped 104px->120px (see .sat --r below) specifically to keep
-     8-item spacing comfortable — at the old 104px radius, 8 items + the 1.14
-     hover scale left only ~9px between buttons; at 120px it's back to ~21px. */
-  #stage.open .sat:nth-child(1){ transition-delay:.03s; }
-  #stage.open .sat:nth-child(2){ transition-delay:.07s; }
-  #stage.open .sat:nth-child(3){ transition-delay:.11s; }
-  #stage.open .sat:nth-child(4){ transition-delay:.15s; }
-  #stage.open .sat:nth-child(5){ transition-delay:.19s; }
-  #stage.open .sat:nth-child(6){ transition-delay:.23s; }
-  #stage.open .sat:nth-child(7){ transition-delay:.27s; }
-  #stage.open .sat:nth-child(8){ transition-delay:.31s; }
+     The delay is set INLINE per button by renderRing() (--d), not by hardcoded
+     :nth-child rules, so any ring size the user picks staggers correctly. */
+  #stage.open .sat{ transition-delay: var(--d, 0s); }
+  /* ...but never delay the hover/press feedback itself, or the button would
+     feel laggy by exactly its fan-out delay. */
+  #stage.open .sat:hover, #stage.open .sat:active{ transition-delay: 0s; }
 
   /* Voice satellite: press-and-hold instead of click, shows a recording pulse. */
   .sat.recording{ background:linear-gradient(155deg,#fff,#ffe9ec) !important;
@@ -173,16 +170,10 @@
 </head>
 <body>
   <div id="stage">
-    <div id="ring">
-      <button class="sat" data-task="answer"    style="--a:-90deg; --r:120px;"><span class="emo">&#128172;</span><span class="lbl">Answer</span></button>
-      <button class="sat" data-task="improve"   style="--a:-45deg; --r:120px;"><span class="emo">&#10024;</span><span class="lbl">Improve</span></button>
-      <button class="sat" data-task="summarize" style="--a:0deg;   --r:120px;"><span class="emo">&#128221;</span><span class="lbl">Summary</span></button>
-      <button class="sat" data-task="translate" style="--a:45deg;  --r:120px;"><span class="emo">&#127760;</span><span class="lbl">Translate</span></button>
-      <button class="sat" data-task="explain"   style="--a:90deg;  --r:120px;"><span class="emo">&#128161;</span><span class="lbl">Explain</span></button>
-      <button class="sat" data-task="fix"       style="--a:135deg; --r:120px;"><span class="emo">&#10003;</span><span class="lbl">Fix</span></button>
-      <button class="sat" data-task="guide"     style="--a:180deg; --r:120px;"><span class="emo">&#129517;</span><span class="lbl">Guide</span></button>
-      <button class="sat" data-task="voice"     style="--a:225deg; --r:120px;"><span class="emo">&#127908;</span><span class="lbl">Voice</span></button>
-    </div>
+    <!-- Satellites are rendered by renderRing() from the user's saved choice
+         (Settings -> "Buttons around the ball"), so both the count and the
+         geometry are data-driven. -->
+    <div id="ring"></div>
     <button id="stopBadge" aria-label="Stop guide" title="Stop guide">&#10005;</button>
     <div id="bubble"></div>
     <button class="bot" id="bot" aria-label="Open Kaeya" title="Ask Kaeya">
@@ -220,6 +211,7 @@
   } catch(e){}
 
   var stage = document.getElementById('stage');
+  var ring = document.getElementById('ring');
   var orbEl = document.querySelector('.orb');
   var stateTimer = null;
   // The (hidden) main window drives quick actions and reports back here so the
@@ -235,10 +227,81 @@
     }
   });
 
-  // ---------- radial menu: hover the ball -> tasks fan out ----------
-  var OPEN = 340;            // window size (logical px) while the ring is open
-                              // (bumped from 300 -> 340 to fit the wider 120px
-                              // ring radius added for the 8-item layout)
+  /* ---------- the ring: which buttons, and where they sit ----------
+     The user picks which of these appear (Settings -> "Buttons around the
+     ball"); the saved list lives in localStorage['konx-ring'] and the main
+     window pushes changes here live via the 'konx-ring' event.
+
+     Geometry is COMPUTED from the count, not hardcoded, so any size the user
+     picks stays comfortably clickable:
+
+         chord between two neighbours = 2 * r * sin(180deg / n)
+
+     A satellite is 66px and grows to 1.14x on hover (~75px), so we need a
+     chord of ~95px to leave a real gap between them. Solving for r and
+     flooring at the original 104px gives: 3-6 buttons -> 104px (the classic
+     look), 7 -> 110px, 8 -> 125px. Without this the 8-button ring would
+     overlap itself on hover. */
+  var RING_CATALOG = [
+    { id:'answer',    emo:'&#128172;', lbl:'Answer' },
+    { id:'improve',   emo:'&#10024;',  lbl:'Improve' },
+    { id:'summarize', emo:'&#128221;', lbl:'Summary' },
+    { id:'translate', emo:'&#127760;', lbl:'Translate' },
+    { id:'explain',   emo:'&#128161;', lbl:'Explain' },
+    { id:'fix',       emo:'&#10003;',  lbl:'Fix' },
+    { id:'guide',     emo:'&#129517;', lbl:'Guide' },
+    { id:'voice',     emo:'&#127908;', lbl:'Voice' }
+  ];
+  var RING_MIN = 3, RING_MAX = 8, SAT_CHORD = 95, RING_MIN_R = 104;
+  var ringIds = [], RING_R = RING_MIN_R;
+  var OPEN = 300;   // orb window size (logical px) while the ring is open
+
+  function defaultRingIds(){
+    return RING_CATALOG.map(function(c){ return c.id; });
+  }
+
+  function readRingIds(){
+    try {
+      var raw = localStorage.getItem('konx-ring');
+      if(raw){
+        var ids = JSON.parse(raw);
+        if(Object.prototype.toString.call(ids) === '[object Array]'){
+          ids = ids.filter(function(id){
+            for(var i=0;i<RING_CATALOG.length;i++) if(RING_CATALOG[i].id === id) return true;
+            return false;
+          });
+          if(ids.length >= RING_MIN && ids.length <= RING_MAX) return ids;
+        }
+      }
+    } catch(e){}
+    return defaultRingIds();
+  }
+
+  function renderRing(){
+    ringIds = readRingIds();
+    var n = ringIds.length;
+    // radius that keeps ~95px between neighbouring button centres
+    var needed = Math.ceil(SAT_CHORD / (2 * Math.sin(Math.PI / n)));
+    RING_R = Math.max(RING_MIN_R, needed);
+    OPEN = Math.max(300, 2 * (RING_R + 45));
+    stage.style.setProperty('--glow', (2 * (RING_R + 40)) + 'px');
+
+    var html = '';
+    ringIds.forEach(function(id, i){
+      var c = null;
+      for(var k=0;k<RING_CATALOG.length;k++) if(RING_CATALOG[k].id === id) c = RING_CATALOG[k];
+      if(!c) return;
+      var angle = -90 + i * (360 / n);          // first button at the top
+      var delay = (0.03 + i * 0.04).toFixed(2); // same cascade feel as before
+      html += '<button class="sat" data-task="' + c.id + '"' +
+              ' style="--a:' + angle + 'deg; --r:' + RING_R + 'px; --d:' + delay + 's;">' +
+              '<span class="emo">' + c.emo + '</span>' +
+              '<span class="lbl">' + c.lbl + '</span></button>';
+    });
+    ring.innerHTML = html;
+    wireSatellites();
+  }
+
   var menuOpen = false, openTimer = null, savedGeom = null;
   // While true, closeMenu() hides the ring but does NOT shrink the window back
   // down — used to keep room for the voice confirmation bubble, which reuses
@@ -278,11 +341,18 @@
     }).catch(function(){});
   }
 
+  // True while the ring is showing specifically to act on something the user
+  // just spoke. If that ring closes without a button being picked, the held
+  // transcript must be thrown away — otherwise the NEXT ring action, minutes
+  // later on completely different text, would silently reuse it.
+  var voiceRingPending = false;
+
   function closeMenu(){
     if(openTimer){ clearTimeout(openTimer); openTimer = null; }
     if(!menuOpen) return;
     menuOpen = false;
     stage.classList.remove('open');
+    if(voiceRingPending){ voiceRingPending = false; emit('konx-voice-discard'); }
     if(!keepOpenForBubble) restoreWindowGeom();
   }
 
@@ -296,39 +366,60 @@
   // Leaving the whole window closes it (moving to a satellite stays inside).
   stage.addEventListener('mouseleave', closeMenu);
 
-  // Click a satellite -> run that task in place, then tuck the menu away.
-  // Voice is excluded here — it's press-and-hold, not click (wired below).
-  Array.prototype.forEach.call(document.querySelectorAll('.sat'), function(s){
-    var task = s.getAttribute('data-task');
-    if(task === 'voice') return;
-    s.addEventListener('click', function(ev){
-      ev.stopPropagation();
-      closeMenu();
-      emit('konx-radial', task);
-    });
-  });
+  // Wire up whatever satellites renderRing() just drew. Called on every
+  // re-render, so the handlers always match the buttons on screen.
+  function wireSatellites(){
+    Array.prototype.forEach.call(ring.querySelectorAll('.sat'), function(s){
+      var task = s.getAttribute('data-task');
 
-  // ---------- Voice satellite: press-and-hold instead of click ----------
-  // Same Pointer-Events + pointer-capture pattern as the existing Voice
-  // Command tab's push-to-talk button, so a drifting finger/cursor still
-  // ends the recording cleanly.
-  var voiceSat = document.querySelector('.sat[data-task="voice"]');
-  if(voiceSat){
-    voiceSat.addEventListener('pointerdown', function(e){
-      e.stopPropagation();
-      try { voiceSat.setPointerCapture(e.pointerId); } catch(_){}
-      voiceSat.classList.add('recording');
-      emit('konx-radial-voice-start');
+      // Voice is press-and-hold, not click. Same Pointer-Events + pointer
+      // capture pattern as the Voice Command tab's push-to-talk button, so a
+      // drifting finger/cursor still ends the recording cleanly.
+      if(task === 'voice'){
+        s.addEventListener('pointerdown', function(e){
+          e.stopPropagation();
+          voiceRingPending = false;   // starting a new recording replaces any held one
+          try { s.setPointerCapture(e.pointerId); } catch(_){}
+          s.classList.add('recording');
+          emit('konx-radial-voice-start');
+        });
+        var endVoiceHold = function(e){
+          if(!s.classList.contains('recording')) return;
+          s.classList.remove('recording');
+          try { s.releasePointerCapture(e.pointerId); } catch(_){}
+          closeMenu();
+          emit('konx-radial-voice-end');
+        };
+        s.addEventListener('pointerup', endVoiceHold);
+        s.addEventListener('pointercancel', endVoiceHold);
+        return;
+      }
+
+      // Everything else: click -> run that task in place, then tuck away.
+      s.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        voiceRingPending = false;   // consumed by this action, not discarded
+        closeMenu();
+        emit('konx-radial', task);
+      });
     });
-    function endVoiceHold(e){
-      voiceSat.classList.remove('recording');
-      try { voiceSat.releasePointerCapture(e.pointerId); } catch(_){}
-      closeMenu();
-      emit('konx-radial-voice-end');
-    }
-    voiceSat.addEventListener('pointerup', endVoiceHold);
-    voiceSat.addEventListener('pointercancel', endVoiceHold);
   }
+
+  // Draw the ring now, and redraw whenever the user changes their picks in
+  // Settings (the main window pushes the new list here immediately).
+  renderRing();
+  listen('konx-ring', function(e){
+    try {
+      if(e.payload) localStorage.setItem('konx-ring', JSON.stringify(e.payload));
+    } catch(_){}
+    // Close first if it happened to be open: a different button count needs a
+    // different window size, and re-opening immediately would race the resize
+    // (openMenu would read the still-expanded size and save THAT as the
+    // collapsed geometry, leaving the orb permanently oversized). The next
+    // hover opens it at the new size.
+    if(menuOpen) closeMenu();
+    renderRing();
+  });
 
   // ---------- Stop-guide badge: pinned to the orb corner, no window resize ----------
   var stopBadge = document.getElementById('stopBadge');
@@ -392,9 +483,28 @@
     }
     bubble.classList.add('show');
   });
+  // "Yes, do this" doesn't act on its own — it hands straight to the ring so
+  // the user picks WHAT Kaeya should do with what they said (Guide me through
+  // it / Answer it / Explain it...). The window is already expanded for the
+  // bubble, so the ring just takes it over without a resize flicker.
+  function ringFromBubble(){
+    bubble.classList.remove('show');
+    bubble.innerHTML = '';
+    voiceRingPending = true;
+    if(savedGeom){                  // already expanded for the bubble
+      keepOpenForBubble = false;
+      menuOpen = true;
+      stage.classList.add('open');
+    } else {                        // shouldn't happen, but never show a clipped ring
+      keepOpenForBubble = false;
+      menuOpen = false;
+      openMenu();
+    }
+  }
+
   bubble.addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b) return;
-    if(b.getAttribute('data-voice-yes')){ emit('konx-voice-yes-tap'); hideBubble(); return; }
+    if(b.getAttribute('data-voice-yes')){ emit('konx-voice-yes-tap'); ringFromBubble(); return; }
     if(b.getAttribute('data-voice-retry')){ emit('konx-voice-retry-tap'); hideBubble(); return; }
   });
 
