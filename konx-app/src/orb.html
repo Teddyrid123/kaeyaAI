@@ -95,8 +95,8 @@
 
   /* A soft aurora glow that blooms behind the ring while it's open — makes the
      whole menu feel like it lights up rather than just popping in. */
-  #stage::before{ content:""; position:absolute; left:50%; top:50%; width:290px; height:290px;
-    margin:-145px 0 0 -145px; border-radius:50%; pointer-events:none; z-index:0;
+  #stage::before{ content:""; position:absolute; left:50%; top:50%; width:330px; height:330px;
+    margin:-165px 0 0 -165px; border-radius:50%; pointer-events:none; z-index:0;
     background: radial-gradient(circle, rgba(123,140,255,.30), rgba(126,224,230,.14) 42%, transparent 68%);
     opacity:0; transform:scale(.35);
     transition: opacity .4s ease, transform .5s cubic-bezier(.22,1,.36,1); }
@@ -117,13 +117,51 @@
   /* Open state: fan the satellites out to their radius. */
   #stage.open .sat{ opacity:1; pointer-events:auto;
     transform: rotate(var(--a)) translate(var(--r)) rotate(calc(-1 * var(--a))) scale(1); }
-  /* Staggered bloom — each satellite fans out just after the one before it. */
+  /* Staggered bloom — each satellite fans out just after the one before it.
+     Extended from 6 to 8 (2026-07-22 ring redesign: Guide + Voice added). The
+     radius was bumped 104px->120px (see .sat --r below) specifically to keep
+     8-item spacing comfortable — at the old 104px radius, 8 items + the 1.14
+     hover scale left only ~9px between buttons; at 120px it's back to ~21px. */
   #stage.open .sat:nth-child(1){ transition-delay:.03s; }
   #stage.open .sat:nth-child(2){ transition-delay:.07s; }
   #stage.open .sat:nth-child(3){ transition-delay:.11s; }
   #stage.open .sat:nth-child(4){ transition-delay:.15s; }
   #stage.open .sat:nth-child(5){ transition-delay:.19s; }
   #stage.open .sat:nth-child(6){ transition-delay:.23s; }
+  #stage.open .sat:nth-child(7){ transition-delay:.27s; }
+  #stage.open .sat:nth-child(8){ transition-delay:.31s; }
+
+  /* Voice satellite: press-and-hold instead of click, shows a recording pulse. */
+  .sat.recording{ background:linear-gradient(155deg,#fff,#ffe9ec) !important;
+    box-shadow:0 16px 30px -8px rgba(220,50,80,.5), 0 0 0 4px rgba(230,60,90,.35) !important; }
+  .sat.recording .emo{ animation: recpulse 1s ease-in-out infinite; }
+  @keyframes recpulse{ 0%,100%{ opacity:1; } 50%{ opacity:.4; } }
+
+  /* Small "stop" badge pinned to the orb corner while a ring-triggered guide
+     walkthrough is active — no window resize needed, sits within the existing
+     120x120 window margin around the 76px ball. */
+  #stopBadge{ position:absolute; top:2px; right:2px; z-index:4; width:22px; height:22px;
+    border-radius:50%; border:none; cursor:pointer; display:none; align-items:center;
+    justify-content:center; font-size:12px; font-weight:700; line-height:1;
+    background:#e14b63; color:#fff; box-shadow:0 4px 10px -2px rgba(200,40,70,.6); }
+  #stopBadge.show{ display:flex; }
+
+  /* Voice confirmation bubble — reuses the ring's expanded 300px canvas so
+     there's room for the transcript text; shown centered where the ring was. */
+  #bubble{ position:absolute; left:50%; top:50%; width:220px; margin:-70px 0 0 -110px;
+    padding:14px 16px; border-radius:16px; z-index:5; text-align:center;
+    font-family:'Segoe UI', system-ui, sans-serif; color:#2a2f45;
+    background:linear-gradient(155deg, rgba(255,255,255,.98), rgba(236,240,255,.94));
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    box-shadow:0 18px 34px -10px rgba(40,50,120,.5), inset 0 1px 0 rgba(255,255,255,.95);
+    opacity:0; pointer-events:none; transform:scale(.85); transition:opacity .2s ease, transform .2s ease; }
+  #bubble.show{ opacity:1; pointer-events:auto; transform:scale(1); }
+  #bubble p{ margin:0 0 10px; font-size:12.5px; line-height:1.4; }
+  #bubble .brow{ display:flex; gap:8px; justify-content:center; }
+  #bubble button{ border:none; border-radius:10px; padding:7px 12px; font-size:11.5px;
+    font-weight:700; cursor:pointer; font-family:inherit; }
+  #bubble .yes{ background:#2f6bff; color:#fff; }
+  #bubble .retry{ background:#eef1ff; color:#2a2f45; }
 
   /* Hover: lift + colour ring glow (needs the #stage.open specificity to win). */
   #stage.open .sat:hover{ color:#0b4bb8; background:linear-gradient(155deg,#fff,#eaf0ff);
@@ -136,13 +174,17 @@
 <body>
   <div id="stage">
     <div id="ring">
-      <button class="sat" data-task="answer"    style="--a:-90deg;  --r:104px;"><span class="emo">&#128172;</span><span class="lbl">Answer</span></button>
-      <button class="sat" data-task="improve"   style="--a:-30deg;  --r:104px;"><span class="emo">&#10024;</span><span class="lbl">Improve</span></button>
-      <button class="sat" data-task="summarize" style="--a:30deg;   --r:104px;"><span class="emo">&#128221;</span><span class="lbl">Summary</span></button>
-      <button class="sat" data-task="translate" style="--a:90deg;   --r:104px;"><span class="emo">&#127760;</span><span class="lbl">Translate</span></button>
-      <button class="sat" data-task="explain"   style="--a:150deg;  --r:104px;"><span class="emo">&#128161;</span><span class="lbl">Explain</span></button>
-      <button class="sat" data-task="fix"        style="--a:210deg;  --r:104px;"><span class="emo">&#10003;</span><span class="lbl">Fix</span></button>
+      <button class="sat" data-task="answer"    style="--a:-90deg; --r:120px;"><span class="emo">&#128172;</span><span class="lbl">Answer</span></button>
+      <button class="sat" data-task="improve"   style="--a:-45deg; --r:120px;"><span class="emo">&#10024;</span><span class="lbl">Improve</span></button>
+      <button class="sat" data-task="summarize" style="--a:0deg;   --r:120px;"><span class="emo">&#128221;</span><span class="lbl">Summary</span></button>
+      <button class="sat" data-task="translate" style="--a:45deg;  --r:120px;"><span class="emo">&#127760;</span><span class="lbl">Translate</span></button>
+      <button class="sat" data-task="explain"   style="--a:90deg;  --r:120px;"><span class="emo">&#128161;</span><span class="lbl">Explain</span></button>
+      <button class="sat" data-task="fix"       style="--a:135deg; --r:120px;"><span class="emo">&#10003;</span><span class="lbl">Fix</span></button>
+      <button class="sat" data-task="guide"     style="--a:180deg; --r:120px;"><span class="emo">&#129517;</span><span class="lbl">Guide</span></button>
+      <button class="sat" data-task="voice"     style="--a:225deg; --r:120px;"><span class="emo">&#127908;</span><span class="lbl">Voice</span></button>
     </div>
+    <button id="stopBadge" aria-label="Stop guide" title="Stop guide">&#10005;</button>
+    <div id="bubble"></div>
     <button class="bot" id="bot" aria-label="Open Kaeya" title="Ask Kaeya">
       <span class="orb"><span class="face"><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i></span></span>
     </button>
@@ -194,8 +236,14 @@
   });
 
   // ---------- radial menu: hover the ball -> tasks fan out ----------
-  var OPEN = 300;            // window size (logical px) while the ring is open
+  var OPEN = 340;            // window size (logical px) while the ring is open
+                              // (bumped from 300 -> 340 to fit the wider 120px
+                              // ring radius added for the 8-item layout)
   var menuOpen = false, openTimer = null, savedGeom = null;
+  // While true, closeMenu() hides the ring but does NOT shrink the window back
+  // down — used to keep room for the voice confirmation bubble, which reuses
+  // this same expanded canvas instead of needing its own resize logic.
+  var keepOpenForBubble = false;
 
   function openMenu(){
     if(menuOpen || drag) return;
@@ -222,17 +270,20 @@
       .catch(function(){ menuOpen = false; });
   }
 
+  function restoreWindowGeom(){
+    if(!savedGeom) return;
+    var g = savedGeom; savedGeom = null;
+    appWindow.setSize(new PhysicalSize(g.w, g.h)).then(function(){
+      return appWindow.setPosition(new PhysicalPosition(g.x, g.y));
+    }).catch(function(){});
+  }
+
   function closeMenu(){
     if(openTimer){ clearTimeout(openTimer); openTimer = null; }
     if(!menuOpen) return;
     menuOpen = false;
     stage.classList.remove('open');
-    if(savedGeom){
-      var g = savedGeom; savedGeom = null;
-      appWindow.setSize(new PhysicalSize(g.w, g.h)).then(function(){
-        return appWindow.setPosition(new PhysicalPosition(g.x, g.y));
-      }).catch(function(){});
-    }
+    if(!keepOpenForBubble) restoreWindowGeom();
   }
 
   // Open on a short, deliberate hover so a quick press-to-drag/tap wins the race.
@@ -246,13 +297,105 @@
   stage.addEventListener('mouseleave', closeMenu);
 
   // Click a satellite -> run that task in place, then tuck the menu away.
+  // Voice is excluded here — it's press-and-hold, not click (wired below).
   Array.prototype.forEach.call(document.querySelectorAll('.sat'), function(s){
+    var task = s.getAttribute('data-task');
+    if(task === 'voice') return;
     s.addEventListener('click', function(ev){
       ev.stopPropagation();
-      var task = s.getAttribute('data-task');
       closeMenu();
       emit('konx-radial', task);
     });
+  });
+
+  // ---------- Voice satellite: press-and-hold instead of click ----------
+  // Same Pointer-Events + pointer-capture pattern as the existing Voice
+  // Command tab's push-to-talk button, so a drifting finger/cursor still
+  // ends the recording cleanly.
+  var voiceSat = document.querySelector('.sat[data-task="voice"]');
+  if(voiceSat){
+    voiceSat.addEventListener('pointerdown', function(e){
+      e.stopPropagation();
+      try { voiceSat.setPointerCapture(e.pointerId); } catch(_){}
+      voiceSat.classList.add('recording');
+      emit('konx-radial-voice-start');
+    });
+    function endVoiceHold(e){
+      voiceSat.classList.remove('recording');
+      try { voiceSat.releasePointerCapture(e.pointerId); } catch(_){}
+      closeMenu();
+      emit('konx-radial-voice-end');
+    }
+    voiceSat.addEventListener('pointerup', endVoiceHold);
+    voiceSat.addEventListener('pointercancel', endVoiceHold);
+  }
+
+  // ---------- Stop-guide badge: pinned to the orb corner, no window resize ----------
+  var stopBadge = document.getElementById('stopBadge');
+  listen('konx-guide-active', function(e){
+    stopBadge.classList.toggle('show', !!e.payload);
+  });
+  stopBadge.addEventListener('click', function(ev){
+    ev.stopPropagation();
+    emit('konx-guide-stop-tap');
+  });
+
+  // ---------- Voice confirmation bubble (reuses the ring's expanded canvas) ----------
+  var bubble = document.getElementById('bubble');
+  function escHtml(s){
+    return ('' + s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function hideBubble(){
+    bubble.classList.remove('show');
+    bubble.innerHTML = '';
+    if(keepOpenForBubble){ keepOpenForBubble = false; restoreWindowGeom(); }
+  }
+  listen('konx-voice-bubble', function(e){
+    var d = e.payload || {};
+    if(d.mode === 'clear'){ hideBubble(); return; }
+    // The bubble needs the ring's wider canvas whether or not the ring is
+    // still visually open (recording can end after the ring auto-closes).
+    keepOpenForBubble = true;
+    if(!menuOpen){
+      menuOpen = true;
+      Promise.all([appWindow.outerPosition(), appWindow.outerSize(), currentMonitor()])
+        .then(function(res){
+          var pos = res[0], size = res[1], mon = res[2];
+          if(!savedGeom) savedGeom = { x: pos.x, y: pos.y, w: size.width, h: size.height };
+          var dpr = window.devicePixelRatio || 1;
+          var openPx = Math.round(OPEN * dpr);
+          var cx = pos.x + size.width / 2, cy = pos.y + size.height / 2;
+          var nx = Math.round(cx - openPx / 2), ny = Math.round(cy - openPx / 2);
+          if(mon){
+            var mp = mon.position, ms = mon.size;
+            nx = Math.max(mp.x, Math.min(nx, mp.x + ms.width - openPx));
+            ny = Math.max(mp.y, Math.min(ny, mp.y + ms.height - openPx));
+          }
+          return appWindow.setSize(new PhysicalSize(openPx, openPx)).then(function(){
+            return appWindow.setPosition(new PhysicalPosition(nx, ny));
+          });
+        }).catch(function(){});
+    }
+    if(d.mode === 'listening'){
+      bubble.innerHTML = '<p>Kaeya is listening to that&hellip;</p>';
+    } else if(d.mode === 'retry'){
+      bubble.innerHTML = '<p>Didn&rsquo;t catch that &mdash; try again.</p>';
+    } else if(d.mode === 'heard'){
+      var t = (d.text || '').trim();
+      var quoted = t ? '&ldquo;' + escHtml(t) + '&rdquo;' : '(heard nothing usable)';
+      bubble.innerHTML =
+        '<p>Kaeya heard: ' + quoted + '</p>' +
+        '<div class="brow">' +
+          '<button type="button" class="yes" data-voice-yes="1">&#10003; Yes, do this</button>' +
+          '<button type="button" class="retry" data-voice-retry="1">&#8635; Try again</button>' +
+        '</div>';
+    }
+    bubble.classList.add('show');
+  });
+  bubble.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    if(b.getAttribute('data-voice-yes')){ emit('konx-voice-yes-tap'); hideBubble(); return; }
+    if(b.getAttribute('data-voice-retry')){ emit('konx-voice-retry-tap'); hideBubble(); return; }
   });
 
   // ---------- tap = open, double-tap = quick default, drag = move ----------

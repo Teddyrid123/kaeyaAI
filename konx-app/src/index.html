@@ -1367,8 +1367,125 @@
     return out.length ? out : [raw];
   }
 
+  // ---------- ring-triggered On-screen Guide (Guide satellite) ----------
+  // Reuses the same reactive step engine as the tab's "Guide me step by step"
+  // (KonxAI.runGuideStep + point_at), but never touches the visible result
+  // panel — the main window stays hidden the whole time; only the arrow
+  // overlay (already built) and a small "stop" badge on the orb (konx-guide-
+  // active) show anything. Click-per-step model: a NEW highlight starts a
+  // fresh walkthrough; with one already active, the SAME click always means
+  // "advance" (no clipboard comparison — see design doc, fixed during
+  // /plan-eng-review after the original clipboard-diff rule proved unsound).
+  var ringGuideActive = false, ringGuideGoal = '', ringGuideHistory = [];
+
+  function ringGuideEnd(){
+    if(!ringGuideActive) return;
+    ringGuideActive = false;
+    ringGuideGoal = ''; ringGuideHistory = [];
+    var invoke2 = tauriInvoke();
+    if(invoke2) invoke2('clear_point').catch(function(){});
+    emit('konx-guide-active', false);
+  }
+
+  function ringGuideStep(){
+    orbState('working');
+    KonxAI.runGuideStep(ringGuideGoal, ringGuideHistory).then(function(out){
+      if(out.done || !out.say){
+        ringGuideEnd();
+        orbState('done'); endQuick();
+        return;
+      }
+      ringGuideHistory.push(out.say);
+      if(ringGuideHistory.length >= GUIDE_MAX_STEPS){
+        ringGuideEnd(); orbState('done'); endQuick(); return;
+      }
+      var invoke2 = tauriInvoke();
+      if(out.point && invoke2){
+        invoke2('point_at', { name: out.point, seconds: 60 })
+          .then(function(){ orbState('done'); endQuick(); })
+          .catch(function(){ orbState('empty'); endQuick(); });
+      } else {
+        if(invoke2) invoke2('clear_point').catch(function(){});
+        orbState('empty'); endQuick();   // no element found for this step — amber, not green
+      }
+    }).catch(function(){ orbState('empty'); endQuick(); });
+  }
+
+  function ringGuideStart(text){
+    ringGuideActive = true;
+    ringGuideGoal = text;
+    ringGuideHistory = [];
+    emit('konx-guide-active', true);
+    ringGuideStep();
+  }
+
+  listen('konx-guide-stop-tap', function(){ ringGuideEnd(); });
+
+  // ---------- ring-triggered Voice (Voice satellite: hold-to-talk) ----------
+  // Reuses the exact same recording/transcription pipeline as the Voice
+  // Command tab (startVoiceRecording/stopVoiceRecording/encodeWav/KonxAI.
+  // runVoice) — the only difference is where the confirmation shows (the orb
+  // window's bubble, not the tab's result panel) and what happens on "Yes"
+  // (paste the raw transcript as fresh content, not run it as an instruction
+  // on an existing selection — see design doc Premise 5).
+  function ringVoiceBubble(payload){ emit('konx-voice-bubble', payload); }
+
+  listen('konx-radial-voice-start', function(){
+    if(voiceRec) return;
+    if(!(window.KonxAI && KonxAI.canUseVoice && KonxAI.canUseVoice())){
+      orbState('empty');   // signed out / can't use voice right now
+      return;
+    }
+    startVoiceRecording().catch(function(){ orbState('empty'); });
+  });
+
+  listen('konx-radial-voice-end', function(){
+    if(!voiceRec) return;
+    var out = stopVoiceRecording();
+    if(!out || out.tooShort){ ringVoiceBubble({ mode:'retry' }); return; }
+    ringVoiceBubble({ mode:'listening' });
+    KonxAI.runVoice(out.base64).then(function(res){
+      if(res.engine === 'mock'){ ringVoiceBubble({ mode:'clear' }); orbState('empty'); return; }
+      var t = (res.text || '').trim();
+      ringPendingTranscript = t;
+      // An empty/silent transcript is a successful call, not an error (per
+      // Stage 2 rules) — the bubble says so plainly rather than showing blank.
+      ringVoiceBubble({ mode:'heard', text: t });
+    }).catch(function(){ ringVoiceBubble({ mode:'clear' }); orbState('empty'); });
+  });
+
+  var ringPendingTranscript = '';
+  listen('konx-voice-yes-tap', function(){
+    var t = ringPendingTranscript; ringPendingTranscript = '';
+    if(!t){ orbState('empty'); return; }
+    // Standard OS paste semantics: replaces a current selection if one
+    // exists, inserts at the cursor otherwise — same as every other ring
+    // action already behaves, no special detection needed (Premise 5).
+    invoke('apply_text', { text: t }).then(function(){ orbState('done'); }).catch(function(){ orbState('empty'); });
+  });
+  listen('konx-voice-retry-tap', function(){ ringPendingTranscript = ''; });
+
   function radialAction(task){
     if(quickBusy) return;
+
+    if(task === 'guide'){
+      quickBusy = true;
+      quickWatch = setTimeout(function(){ quickBusy = false; quickWatch = null; }, 40000);
+      if(ringGuideActive){ ringGuideStep(); return; }
+      invoke('quick_capture').then(function(raw){
+        var text = (raw || '').trim();
+        if(!text){ orbState('empty'); endQuick(); return; }
+        ringGuideStart(text);
+      }).catch(function(){ orbState('empty'); endQuick(); });
+      return;
+    }
+
+    // Any OTHER ring action ends an active guide first (fixed during
+    // /plan-eng-review outside voice — clicking a different satellite while a
+    // guide is idle between steps used to leave stale guideGoal/guideHistory
+    // around, which the next Guide tap would silently resume against).
+    if(ringGuideActive) ringGuideEnd();
+
     var cfg = RADIAL_ACTIONS[task];
     if(!cfg) return;
     quickBusy = true;

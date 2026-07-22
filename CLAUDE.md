@@ -230,6 +230,51 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
     fixture, pending a privacy decision on the raw clips.
   - **Stage 3 (conversation) — still gated on Stage 2 being watched working in a real classroom** (the
     live desk test above is a good sign but not that field test).
+- **Ring redesign — Guide + Voice on the orb ring — BUILT 2026-07-22, AWAITING JOSEPH'S LIVE TEST.**
+  Trigger: a friend who already uses Kaeya told his whole office to install it (unprompted), and Joseph
+  watched him hit the real friction — reaching On-screen Guide or Voice still meant opening the main
+  window and hunting a tab, while the 6 rewrite actions were already one hover-and-click away. Now the
+  ring has **8 satellites**: the existing Answer/Improve/Summary/Translate/Explain/Fix plus **🧭 Guide**
+  and **🎤 Voice**. Nothing new server-side; both reuse engines that were already live.
+  - **Ring geometry:** 8 items at 45° spacing, radius bumped **104px → 120px**, open window 300 → **340**
+    logical px, aurora glow 290 → 330px, stagger `:nth-child` rules extended to 8. The radius bump is
+    load-bearing, not cosmetic: at the old 104px, 8 buttons plus the existing `scale(1.14)` hover left
+    only ~9px between neighbours (they'd visually collide); 120px restores ~21px.
+  - **Guide (click-per-step):** highlight a question anywhere → click Guide → Kaeya screenshots, picks the
+    next step, and draws the arrow via the existing `point_at`. Click Guide **again** to advance. Uses
+    `KonxAI.runGuideStep` + `GUIDE_MAX_STEPS`, entirely in the hidden main window — the main window never
+    shows. A small red **✕ stop badge** appears on the orb corner while a walkthrough is active
+    (`konx-guide-active` event → `konx-guide-stop-tap`).
+    **Two bugs caught in review before they were written:** (1) the first design compared `quick_capture`
+    against the stored goal to decide "new question vs. advance" — but users copy other things mid-task
+    (an address, a password), which would silently restart the walkthrough with garbage as the goal. Fixed
+    to a plain boolean (`ringGuideActive`): a click always means *advance* when a guide is running; a new
+    goal requires Stop first. (2) clicking any OTHER satellite mid-guide used to leave stale guide state
+    behind — now every non-guide action calls `ringGuideEnd()` first.
+  - **Voice (press-and-hold):** the Voice satellite is deliberately NOT wired to `click` like the other 7 —
+    it uses pointerdown/up + pointer capture (same pattern as the Voice Command tab's `voicePttBtn`) and
+    shows a red recording pulse while held. Release → the existing `startVoiceRecording`/`stopVoiceRecording`/
+    `encodeWav`/`KonxAI.runVoice` pipeline runs → a **confirmation bubble on the orb** shows
+    `Kaeya heard: "…"` with Yes / Try again. The "never auto-act on a transcript" Stage 2 safety rule is
+    preserved. On **Yes**, the raw transcript is pasted via `apply_text` as fresh CONTENT (standard paste
+    semantics: replaces a selection if one exists, inserts at the cursor otherwise) — the user then
+    highlights it and taps any other ring action. **Note:** "Voice" now means two different things by entry
+    point — the tab treats the transcript as an *instruction* applied to a selection (`confirmVoice` →
+    `run(t)`, unchanged); the ring pastes it as *content*. Intentional, but worth watching for confusion.
+    Voice has no offline fallback, so a signed-out tap just flashes the orb amber (`canUseVoice()` gate).
+  - **Bubble/canvas trick:** the confirmation bubble reuses the ring's already-expanded 340px window
+    instead of needing its own resize logic — `keepOpenForBubble` makes `closeMenu()` hide the ring
+    *without* shrinking the window, and `restoreWindowGeom()` shrinks it once the bubble is dismissed.
+  - **NOT built (deliberately deferred, see design doc):** the Settings picker for choosing which icons
+    appear on your own ring, and the floating draggable **Text Guide** card. Text Guide is gated behind a
+    hard-gate isolated prototype first (`WS_EX_NOACTIVATE` + JS-driven drag via `setPosition` throttled
+    with `requestAnimationFrame` — native title-bar drag can't work on a non-activating window, it only
+    jumps on mouse-release). If that prototype fails, Text Guide gets CUT rather than force-fit.
+  - **Regression watch on next live test:** all 6 original ring actions still work (the dispatch in
+    `radialAction()` was restructured to branch early for guide/voice), and the 6-item fan-out stagger
+    still looks right after the `:nth-child` extension.
+  - Design doc: `~/.gstack/projects/Teddyrid123-kaeyaAI/LLC-3-main-design-20260722-151238.md` (3 rounds of
+    adversarial review in /office-hours, then /plan-eng-review + outside voice — 9 more fixes).
 
 ## Repo layout
 ```
