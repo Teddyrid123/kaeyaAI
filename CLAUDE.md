@@ -265,11 +265,48 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
   - **Bubble/canvas trick:** the confirmation bubble reuses the ring's already-expanded 340px window
     instead of needing its own resize logic — `keepOpenForBubble` makes `closeMenu()` hide the ring
     *without* shrinking the window, and `restoreWindowGeom()` shrinks it once the bubble is dismissed.
-  - **NOT built (deliberately deferred, see design doc):** the Settings picker for choosing which icons
-    appear on your own ring, and the floating draggable **Text Guide** card. Text Guide is gated behind a
-    hard-gate isolated prototype first (`WS_EX_NOACTIVATE` + JS-driven drag via `setPosition` throttled
-    with `requestAnimationFrame` — native title-bar drag can't work on a non-activating window, it only
-    jumps on mouse-release). If that prototype fails, Text Guide gets CUT rather than force-fit.
+  - **Follow-ups shipped same day (2026-07-22), all from Joseph's feedback:**
+    - **Voice hands off to the ring.** Confirming a transcript used to just paste the words and stop.
+      Now **Yes → the bubble swaps for the ring** and whatever the user picks runs against what they
+      said (speak a question → Answer → it lands in Word; speak a task → Guide → arrows start). The
+      transcript is held in memory and **never pasted on its own** — speaking "show me how to change my
+      desktop background" was dumping that sentence into the user's document. Because dictated text has
+      nothing selected to replace, spoken input always writes at the cursor (`append:true`) even for the
+      rewrite actions. Held text is discarded via `konx-voice-discard` if that ring closes without a
+      pick, so it can't leak into an unrelated action later.
+    - **The user picks their own ring.** Settings → The floating ball → **"Buttons around the ball"**,
+      any 3-8 of the catalog. Saved to `localStorage['konx-ring']`, pushed live to the orb via a
+      **`konx-ring`** event (redraws immediately, no restart). The picker disables chips at the limits
+      rather than failing on click. Satellites are no longer hardcoded markup: **`renderRing()`** draws
+      them and **computes geometry from the count** — radius solves `2*r*sin(180/n) >= 95px` so
+      neighbours keep a real gap once the existing `scale(1.14)` hover growth is counted (3-6 → 104px,
+      7 → 110px, 8 → 125px), with window size + aurora glow sized to match. Stagger delays moved from
+      hardcoded `:nth-child` rules to an inline `--d` per button (hover/active reset it to `0s`, or
+      feedback would lag by the fan-out delay).
+    - **Guide asks which mode first**, matching the in-app button: a bubble on the ball offering
+      **👉 Point on screen** vs **📄 Show a step list**. Mid-walkthrough, a Guide click still just
+      means "next step". The two modes are mutually exclusive — starting one clears the other.
+    - **Text Guide card — BUILT (was deferred).** New **`guidecard`** window (`src/guidecard.html`):
+      low opacity so the real app shows through, lifting to full on hover; always-on-top; a grab strip
+      along the top is the only drag handle. Content is the one-shot `KonxAI.runVision` numbered list
+      (same as the tab's Text list mode). New Rust `show_guide_card`/`hide_guide_card`; it parks
+      top-right on FIRST show only, then stays where the user dragged it.
+      **Drag is JS-driven** (`pointerdown` → `setPosition`, throttled to one call per
+      `requestAnimationFrame`) — NOT Tauri's `data-tauri-drag-region`, because the native drag path
+      needs an activatable window and this one is `focus:false` so it never steals focus. Firing
+      `setPosition` on every raw `pointermove` floods IPC and makes the drag lag.
+      **Both window gotchas handled:** `guidecard` is in `capabilities/default.json` `windows` (else
+      zero permissions → never receives its events, exactly what bit `overlay`), AND in the
+      **foreground-tracker exclude list** in `lib.rs` — critical here because unlike the click-through
+      arrow overlay, this card is interactive and WILL take foreground when dragged; without the
+      exclusion the tracker would record Kaeya's own card as "the app the user was working in" and the
+      next copy/paste would target the card instead of Word.
+    - `orb.html` window-geometry bookkeeping collapsed into one `expandWindow()`, with shrink-back
+      tracked by a `restoring` promise that expands must await — otherwise a bubble opening mid-shrink
+      measures the expanded window and saves THAT as the collapsed size, leaving the orb permanently
+      oversized.
+  - **Still NOT built:** per-user ring ordering (ring follows catalog order), and the step-by-step
+    variant of the card (it shows the full list, not one step at a time synced to the arrow).
   - **Regression watch on next live test:** all 6 original ring actions still work (the dispatch in
     `radialAction()` was restructured to branch early for guide/voice), and the 6-item fan-out stagger
     still looks right after the `:nth-child` extension.
