@@ -114,7 +114,12 @@
     opacity:0; pointer-events:none;
     transform: rotate(var(--a)) translate(0px) rotate(calc(-1 * var(--a))) scale(.25);
     transition: transform .42s cubic-bezier(.34,1.56,.64,1), opacity .26s ease, box-shadow .18s, background .18s, color .18s; }
-  .sat .emo{ font-size:22px; line-height:1; filter:drop-shadow(0 1px 2px rgba(60,60,120,.22)); }
+  /* Line icons (inline SVG — no CDN, no icon font). They inherit the button's
+     `color` via currentColor, so the hover tint below needs no extra rule. */
+  .sat .emo{ display:flex; align-items:center; justify-content:center; width:23px; height:23px;
+    filter:drop-shadow(0 1px 2px rgba(60,60,120,.22)); }
+  .sat .emo svg{ width:100%; height:100%; display:block; fill:none; stroke:currentColor;
+    stroke-width:1.85; stroke-linecap:round; stroke-linejoin:round; }
   .sat .lbl{ font-size:9px; font-weight:700; letter-spacing:.02em; color:#5a6180; }
 
   /* Open state: fan the satellites out to their radius. */
@@ -243,15 +248,38 @@
      flooring at the original 104px gives: 3-6 buttons -> 104px (the classic
      look), 7 -> 110px, 8 -> 125px. Without this the 8-button ring would
      overlap itself on hover. */
+  /* Icons are inline SVG paths, not emoji: emoji render as the OS's own colour
+     glyphs (different on every Windows build, and they ignore our hover tint).
+     These inherit `color` through currentColor and stay crisp at any size.
+     Kept as bare path markup so renderRing() can wrap them in one <svg>. */
+  var ICON = {
+    answer:    '<path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 20 11.5z"/>',
+    improve:   '<path d="M10.5 3l1.7 4.3L16.5 9l-4.3 1.7-1.7 4.3-1.7-4.3L4.5 9l4.3-1.7L10.5 3z"/>' +
+               '<path d="M17.5 14l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1z"/>',
+    summarize: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>' +
+               '<path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>',
+    translate: '<circle cx="12" cy="12" r="9"/><path d="M3.4 9h17.2M3.4 15h17.2"/>' +
+               '<path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/>',
+    explain:   '<path d="M9.5 18.5h5"/><path d="M10.5 21.5h3"/>' +
+               '<path d="M12 2.5a6.5 6.5 0 0 0-3.8 11.8v2.2h7.6v-2.2A6.5 6.5 0 0 0 12 2.5z"/>',
+    fix:       '<path d="M20 6.5L9.2 17.3 4 12.1"/>',
+    guide:     '<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1 5.1-2.1z"/>',
+    voice:     '<rect x="9" y="2.5" width="6" height="11" rx="3"/>' +
+               '<path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3.5"/>'
+  };
+  function iconSvg(id){
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICON[id] || '') + '</svg>';
+  }
+
   var RING_CATALOG = [
-    { id:'answer',    emo:'&#128172;', lbl:'Answer' },
-    { id:'improve',   emo:'&#10024;',  lbl:'Improve' },
-    { id:'summarize', emo:'&#128221;', lbl:'Summary' },
-    { id:'translate', emo:'&#127760;', lbl:'Translate' },
-    { id:'explain',   emo:'&#128161;', lbl:'Explain' },
-    { id:'fix',       emo:'&#10003;',  lbl:'Fix' },
-    { id:'guide',     emo:'&#129517;', lbl:'Guide' },
-    { id:'voice',     emo:'&#127908;', lbl:'Voice' }
+    { id:'answer',    lbl:'Answer' },
+    { id:'improve',   lbl:'Improve' },
+    { id:'summarize', lbl:'Summary' },
+    { id:'translate', lbl:'Translate' },
+    { id:'explain',   lbl:'Explain' },
+    { id:'fix',       lbl:'Fix' },
+    { id:'guide',     lbl:'Guide' },
+    { id:'voice',     lbl:'Voice' }
   ];
   var RING_MIN = 3, RING_MAX = 8, SAT_CHORD = 95, RING_MIN_R = 104;
   var ringIds = [], RING_R = RING_MIN_R;
@@ -296,7 +324,7 @@
       var delay = (0.03 + i * 0.04).toFixed(2); // same cascade feel as before
       html += '<button class="sat" data-task="' + c.id + '"' +
               ' style="--a:' + angle + 'deg; --r:' + RING_R + 'px; --d:' + delay + 's;">' +
-              '<span class="emo">' + c.emo + '</span>' +
+              '<span class="emo">' + iconSvg(c.id) + '</span>' +
               '<span class="lbl">' + c.lbl + '</span></button>';
     });
     ring.innerHTML = html;

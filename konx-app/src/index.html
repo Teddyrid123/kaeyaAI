@@ -154,12 +154,6 @@
   .top .status{ font-size:12px; color:var(--good); display:flex; align-items:center; gap:6px;}
   .top .status::before{ content:""; width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 0 3px rgba(31,157,107,0.2);}
 
-  /* OpenAI / Gemini brain switch */
-  .provswitch{ display:inline-flex; background:var(--panel-2); border:1px solid var(--stroke); border-radius:999px; padding:3px; gap:2px; }
-  .provswitch button{ border:none; background:transparent; cursor:pointer; font-family:var(--font); font-weight:600; font-size:11.5px;
-    color:var(--ink-faint); padding:5px 12px; border-radius:999px; transition:background .2s, color .2s; }
-  .provswitch button:hover{ color:var(--ink); }
-  .provswitch button.active{ background:#fff; color:var(--accent-2); box-shadow:var(--shadow-soft); }
 
   /* float-on-edge toggle in the top bar */
   .float-toggle{ margin-left:auto; display:inline-flex; align-items:center; gap:10px; cursor:pointer;
@@ -191,7 +185,10 @@
   .welcome{ font-family:var(--font); font-weight:700; font-size:clamp(24px,3.2vw,32px); letter-spacing:-0.02em;
     text-align:center; text-wrap:balance; margin:10px 0 6px;}
   .welcome b{ background:linear-gradient(120deg, var(--accent-2), #8b6bff); -webkit-background-clip:text; background-clip:text; color:transparent;}
-  .sub{ text-align:center; color:var(--ink-soft); font-size:14.5px; max-width:44ch; margin:0 0 6px; line-height:1.55;}
+  /* Tagline, not instructions: one line that says what Kaeya is for. The
+     how-to belongs on the tabs below, where the user is already looking. */
+  .sub{ text-align:center; color:var(--ink-soft); font-size:16px; max-width:44ch; margin:0 0 6px;
+    line-height:1.45; font-weight:500; letter-spacing:-0.005em; }
 
   .capture{ margin:16px 0 4px; width:100%; max-width:620px; border:1px dashed var(--stroke-2); border-radius:var(--r-md);
     padding:12px 16px; background:var(--panel-2);}
@@ -447,7 +444,9 @@
     border-radius:999px; cursor:pointer; font-family:var(--font); font-size:13px; font-weight:600;
     color:var(--ink-soft); background:var(--panel); border:1px solid var(--stroke-2);
     transition:background .18s, border-color .18s, color .18s, opacity .18s; }
-  .ringpick button .rp-emo{ font-size:15px; line-height:1; }
+  .ringpick button .rp-emo{ display:flex; align-items:center; justify-content:center; width:15px; height:15px; }
+  .ringpick button .rp-emo svg{ width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.9;
+    stroke-linecap:round; stroke-linejoin:round; }
   .ringpick button .rp-tick{ font-size:11px; opacity:0; transition:opacity .18s; }
   .ringpick button[aria-pressed="true"]{ color:#fff; border-color:transparent;
     background:linear-gradient(120deg,var(--accent-2),var(--cyan)); }
@@ -489,7 +488,6 @@
   /* raise-surfaces that were hardcoded white in light mode */
   html.dark .rail button.active,
   html.dark .rail .look.active,
-  html.dark .provswitch button.active,
   html.dark .card:hover,
   html.dark .pfield input:focus,
   html.dark .pfield textarea:focus,
@@ -628,10 +626,6 @@
         <span class="brand" data-tauri-drag-region>Kaeya</span>
         <span class="ver">v1.0</span>
         <span class="status">Ready</span>
-        <span class="provswitch" id="provSwitch" role="group" aria-label="Choose AI brain">
-          <button data-prov="openai" type="button">OpenAI</button>
-          <button data-prov="gemini" type="button">Gemini</button>
-        </span>
         <button class="float-toggle" id="floatToggle" aria-pressed="true" title="Show the floating Kaeya ball on your screen edge">
           Float on edge <span class="switch"><b></b></span>
         </button>
@@ -647,7 +641,7 @@
           <div class="reflection"></div>
 
           <h2 class="welcome">Welcome to <b>Kaeya</b></h2>
-          <p class="sub">Highlight text anywhere and tap the floating ball &mdash; or paste text into Kaeya &mdash; then pick what you&rsquo;d like it to do.</p>
+          <p class="sub">Ask anything. Kaeya shows you exactly where to click.</p>
 
           <!-- Selected text: sits at the top. Shows on the Text assistance tab, or once
                you capture text (tap the ball / double-tap for quick mode) or paste it. -->
@@ -855,7 +849,7 @@
               <div class="blurb">Everything you need to start rewriting text anywhere.</div>
               <ul>
                 <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Rewrite text in any app</li>
-                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Fast Gemini Flash brain</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Fast, everyday AI brain</li>
                 <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> All floating-ball looks</li>
               </ul>
               <button class="choose" type="button" data-plan="free">Current plan</button>
@@ -867,7 +861,7 @@
               <div class="blurb">The strongest brains and every power feature, unlocked.</div>
               <ul>
                 <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Everything in Starter</li>
-                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Top brains: GPT-4o &amp; Gemini Pro</li>
+                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Kaeya's strongest AI brain</li>
                 <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Deep think on every task</li>
                 <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Priority speed</li>
               </ul>
@@ -1010,16 +1004,6 @@
 
           <div class="setgroup">Writing</div>
           <div class="setlist">
-            <div class="setrow">
-              <div class="setinfo">
-                <div class="setname">Default AI brain</div>
-                <div class="setdesc">Which AI Kaeya uses first. (Gemini is free right now.)</div>
-              </div>
-              <span class="seg" id="defBrain" role="group" aria-label="Default AI brain">
-                <button type="button" data-prov="openai">OpenAI</button>
-                <button type="button" data-prov="gemini">Gemini</button>
-              </span>
-            </div>
             <div class="setrow">
               <div class="setinfo">
                 <div class="setname">Quick action</div>
@@ -1764,7 +1748,7 @@
     KonxAI.run(captured, ins, { deepThink: deepOn() }).then(function(out){
       resultText.textContent = out.text;
       modelTag.innerHTML =
-        '<span class="dot"></span> Handled by <b>' + out.modelLabel + '</b>' +
+        '<span class="dot"></span> <b>Kaeya</b>' +
         ' <span class="tier">' + (out.tier === 'large' ? 'big task' : 'quick task') + '</span>' +
         (out.engine === 'mock'
           ? ' <span class="tier warn">demo brain</span>' + reasonNote(out.reason)
@@ -1910,7 +1894,7 @@
     speak(step.say);
 
     modelTag.innerHTML =
-      '<span class="dot"></span> Handled by <b>' + guideModelLabel + '</b> ' +
+      '<span class="dot"></span> <b>Kaeya</b> ' +
       '<span class="tier">on-screen guide</span>' +
       (guideEngine === 'mock' ? ' <span class="tier warn">demo brain</span>' : ' <span class="tier">live</span>');
     modelTag.hidden = false;
@@ -1976,7 +1960,7 @@
       resultText.innerHTML = formatGuidance(out.text);
       speak(cleanForSpeech(out.text));
       modelTag.innerHTML =
-        '<span class="dot"></span> Handled by <b>' + out.modelLabel + '</b>' +
+        '<span class="dot"></span> <b>Kaeya</b>' +
         ' <span class="tier">screen help</span>' +
         (out.engine === 'mock'
           ? ' <span class="tier warn">demo brain</span>' + reasonNote(out.reason)
@@ -2114,7 +2098,7 @@
           '<button type="button" class="gbtn" data-voiceconfirm="1"><b>&#10003; Yes, do this</b></button>' +
           '<button type="button" class="gbtn" data-voiceretry="1"><b>&#8635; Try again</b></button>' +
         '</div></div>',
-        '<span class="dot"></span> Handled by <b>' + res.providerLabel + '</b> <span class="tier">voice</span>'
+        '<span class="dot"></span> <b>Kaeya</b> <span class="tier">voice</span>'
       );
     }).catch(function(){
       showVoiceResult('<p>Something went wrong. Please try again.</p>');
@@ -2216,26 +2200,16 @@
     setFloat(floatToggle.getAttribute('aria-pressed') !== 'true');
   });
 
-  /* ---------- OpenAI / Gemini brain switch ---------- */
-  var provSwitch = $('provSwitch');
-  function paintProv(){
-    var active = KonxAI.config.activeProvider;
-    var btns = provSwitch.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('active', btns[i].getAttribute('data-prov')===active); }
-  }
-  provSwitch.addEventListener('click', function(e){
-    var b = e.target.closest('button'); if(!b) return;
-    var prov = b.getAttribute('data-prov');
-    KonxAI.setProvider(prov);
-    try { localStorage.setItem('konx-provider', prov); } catch(err){}
-    paintProv();
-    if(typeof paintDefBrain==='function') paintDefBrain();   // keep the Settings copy in sync
-  });
+  /* ---------- which AI provider runs underneath ----------
+     Deliberately NOT surfaced in the UI: which model answered is our plumbing,
+     not the user's decision — a non-technical user has no basis to choose, and
+     naming the model invites "is the other one better?". The router still keeps
+     a provider setting (and a previously saved choice is still honoured), it
+     just isn't user-facing any more. */
   try {
     var savedProv = localStorage.getItem('konx-provider');
     if(savedProv) KonxAI.setProvider(savedProv);
   } catch(e){}
-  paintProv();
 
   /* ---------- tab / view switching ---------- */
   var lookBtn=$('lookBtn'), appearDone=$('appearDone'), picks=$('picks');
@@ -2358,15 +2332,38 @@
      no restart. The catalog + geometry live in orb.html; this is just the
      picker. Between 3 and 8: fewer than 3 isn't a ring, and past 8 the
      buttons start overlapping each other on hover. */
+  /* Same line-icon set as the ring itself (orb.html's ICON map) — kept as a
+     second copy since this window can't reach into the orb window's JS, but
+     the paths must stay identical so the picker previews match what appears
+     on the ball. */
+  var RING_ICON = {
+    answer:    '<path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 20l1.8-4.9A7.5 7.5 0 1 1 20 11.5z"/>',
+    improve:   '<path d="M10.5 3l1.7 4.3L16.5 9l-4.3 1.7-1.7 4.3-1.7-4.3L4.5 9l4.3-1.7L10.5 3z"/>' +
+               '<path d="M17.5 14l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1z"/>',
+    summarize: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>' +
+               '<path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>',
+    translate: '<circle cx="12" cy="12" r="9"/><path d="M3.4 9h17.2M3.4 15h17.2"/>' +
+               '<path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/>',
+    explain:   '<path d="M9.5 18.5h5"/><path d="M10.5 21.5h3"/>' +
+               '<path d="M12 2.5a6.5 6.5 0 0 0-3.8 11.8v2.2h7.6v-2.2A6.5 6.5 0 0 0 12 2.5z"/>',
+    fix:       '<path d="M20 6.5L9.2 17.3 4 12.1"/>',
+    guide:     '<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1 5.1-2.1z"/>',
+    voice:     '<rect x="9" y="2.5" width="6" height="11" rx="3"/>' +
+               '<path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3.5"/>'
+  };
+  function ringIconSvg(id){
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (RING_ICON[id] || '') + '</svg>';
+  }
+
   var RING_CATALOG = [
-    { id:'answer',    emo:'💬', lbl:'Answer' },
-    { id:'improve',   emo:'✨',       lbl:'Improve' },
-    { id:'summarize', emo:'📝', lbl:'Summary' },
-    { id:'translate', emo:'🌐', lbl:'Translate' },
-    { id:'explain',   emo:'💡', lbl:'Explain' },
-    { id:'fix',       emo:'✓',       lbl:'Fix' },
-    { id:'guide',     emo:'🧭', lbl:'Guide' },
-    { id:'voice',     emo:'🎤', lbl:'Voice' }
+    { id:'answer',    lbl:'Answer' },
+    { id:'improve',   lbl:'Improve' },
+    { id:'summarize', lbl:'Summary' },
+    { id:'translate', lbl:'Translate' },
+    { id:'explain',   lbl:'Explain' },
+    { id:'fix',       lbl:'Fix' },
+    { id:'guide',     lbl:'Guide' },
+    { id:'voice',     lbl:'Voice' }
   ];
   var RING_MIN = 3, RING_MAX = 8;
   var ringPick = $('ringPick'), ringPickNote = $('ringPickNote');
@@ -2405,7 +2402,7 @@
       var locked = (on && atMin) || (!on && atMax);
       return '<button type="button" data-ring="' + c.id + '" aria-pressed="' + (on ? 'true':'false') + '"' +
         (locked ? ' disabled' : '') + '>' +
-        '<span class="rp-emo">' + c.emo + '</span>' + escHtml(c.lbl) +
+        '<span class="rp-emo">' + ringIconSvg(c.id) + '</span>' + escHtml(c.lbl) +
         '<span class="rp-tick">✓</span></button>';
     }).join('');
     ringPickNote.textContent = chosen.length + ' of ' + RING_MAX + ' showing.' +
@@ -2433,20 +2430,6 @@
 
   paintRingPick();
 
-  // Default AI brain (segmented) — shares state with the top-bar OpenAI/Gemini switch.
-  var defBrain = $('defBrain');
-  function paintDefBrain(){
-    var active = KonxAI.config.activeProvider;
-    var btns = defBrain.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('active', btns[i].getAttribute('data-prov')===active); }
-  }
-  defBrain.addEventListener('click', function(e){
-    var b = e.target.closest('button'); if(!b) return;
-    var prov = b.getAttribute('data-prov');
-    KonxAI.setProvider(prov); setSetting('konx-provider', prov);
-    paintDefBrain(); if(typeof paintProv==='function') paintProv();
-  });
-  paintDefBrain();   // reflect the restored provider on load
 
   // Default action + translate language dropdowns.
   var defAction=$('defAction'), defLang=$('defLang');

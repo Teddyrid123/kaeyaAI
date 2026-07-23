@@ -312,6 +312,35 @@ fewer clicks than opening ChatGPT?" Yes → build. No → it's just another AI f
     still looks right after the `:nth-child` extension.
   - Design doc: `~/.gstack/projects/Teddyrid123-kaeyaAI/LLC-3-main-design-20260722-151238.md` (3 rounds of
     adversarial review in /office-hours, then /plan-eng-review + outside voice — 9 more fixes).
+- **UI polish pass — DONE 2026-07-23, rebuilt, awaiting Joseph's install check.** Three touches from
+  Joseph's own screenshots/markup, ahead of the first outside-tester round:
+  - **Which AI model answers is no longer shown anywhere.** Removed the OpenAI/Gemini switch from the
+    top bar and from Settings → Default AI brain (`index.html`: `#provSwitch`, `#defBrain`, and their
+    `.provswitch`/`paintProv`/`paintDefBrain` JS all deleted). Every "Handled by Gemini" / "Handled by
+    GPT-4o" result badge now just says **"Kaeya"**. The Pro-plan feature list on the Subscription tab
+    also had brand names in it ("Fast Gemini Flash brain", "Top brains: GPT-4o & Gemini Pro") — reworded
+    to "Fast, everyday AI brain" / "Kaeya's strongest AI brain". The router still has a provider setting
+    under the hood (`KonxAI.config.activeProvider`, `localStorage['konx-provider']`) and a previously
+    saved choice is still honoured on load — it's just not user-facing any more. Rationale: a
+    non-technical user has no basis to choose between models, and naming them just invites "is the other
+    one better?"
+  - **Welcome-screen tagline replaced.** The instructional paragraph under "Welcome to Kaeya" ("Highlight
+    text anywhere and tap the floating ball — or paste text into Kaeya — then pick what you'd like it to
+    do.") is now one line: **"Ask anything. Kaeya shows you exactly where to click."** `.sub` bumped
+    14.5px→16px / weight 500 to read as a tagline, not fine print — the how-to already lives on the tabs
+    below.
+  - **Ring icons are now line-style SVG, not emoji.** Emoji render as the OS's own colour glyphs (varies
+    by Windows build, ignores hover-color tint). Added an `ICON` map of 8 hand-drawn inline SVG paths in
+    `orb.html` (answer/improve/summarize/translate/explain/fix/guide/voice), rendered via `iconSvg(id)`
+    inside `renderRing()`; `.sat .emo` restyled to size/host an `<svg>` with `stroke:currentColor` so the
+    existing hover-tint CSS keeps working with zero extra rules. **Inline SVG, not a Font Awesome
+    import** — the no-CDN rule (see Conventions) rules out pulling in an icon font. `index.html`'s
+    Settings → "Buttons around the ball" picker keeps its own copy of the same paths (`RING_ICON`/
+    `ringIconSvg`, `.rp-emo`) since that window can't reach into `orb.html`'s JS — paths must stay
+    byte-identical between the two so the picker preview matches what actually appears on the ball.
+  - Rebuilt (`Kaeya_0.1.0_x64-setup.exe` / `.msi`, same paths as before) — **not yet installed/confirmed
+    by Joseph.** Verify before the next outside-tester share: top bar + Settings show no model names, all
+    8 ring icons render and stay legible at 22px, tagline reads as one line.
 
 ## Repo layout
 ```
